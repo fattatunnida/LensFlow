@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function activeMember(studioId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/studios/$(studioId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/studios/$(studioId)/members/$(request.auth.uid)).data.status == 'active'
+        && get(/databases/$(database)/documents/studios/$(studioId)/members/$(request.auth.uid)).data.role in ['owner', 'staff'];
+    }
+
+    // Provisioned by trusted Admin scripts. A client cannot choose its own
+    // studio, grant itself a role, or activate a membership.
+    match /users/{userId} {
+      allow get: if signedIn() && request.auth.uid == userId;
+      allow list, create, update, delete: if false;
+    }
+    match /studios/{studioId} {
+      allow get: if activeMember(studioId);
+      allow list, create, update, delete: if false;
+      match /members/{userId} {
+        // Reading one's own inactive record permits clean access revocation.
+        allow get: if signedIn() && request.auth.uid == userId;
+        allow list, create, update, delete: if false;
+      }
+    }
+    // Future booking and finance collections stay closed until implemented.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

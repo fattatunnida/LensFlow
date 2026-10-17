@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "LensFlow",
+    "slug": "lensflow",
+    "scheme": "lensflow",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/brand/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": { "supportsTablet": false, "bundleIdentifier": "app.lensflow.mobile" },
+    "android": {
+      "adaptiveIcon": { "backgroundColor": "#203C35", "foregroundImage": "./assets/brand/adaptive-icon.png" },
+      "predictiveBackGestureEnabled": true,
+      "package": "app.lensflow.mobile"
+    },
+    "web": { "favicon": "./assets/brand/favicon.png", "output": "single" },
+    "plugins": [
+      "expo-router",
+      ["expo-splash-screen", {
+        "backgroundColor": "#152F25",
+        "image": "./assets/auth/aperture-gold.png",
+        "imageWidth": 72,
+        "resizeMode": "contain"
+      }],
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}

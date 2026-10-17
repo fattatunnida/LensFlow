@@ -1,0 +1,50 @@
+{
+  "name": "lensflow",
+  "version": "1.0.0",
+  "engines": { "node": ">=24.12.0" },
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "expo": "~58.0.13",
+    "expo-constants": "~58.0.12",
+    "expo-dev-client": "~58.0.13",
+    "expo-font": "~58.0.8",
+    "expo-linking": "~58.0.13",
+    "expo-router": "~58.0.22",
+    "expo-secure-store": "~58.0.2",
+    "expo-splash-screen": "~58.0.10",
+    "expo-status-bar": "~58.0.3",
+    "firebase": "13.0.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "~4.30.0",
+    "react-native-web": "^0.21.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "~19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~58.0.4",
+    "firebase-admin": "^14.5.0",
+    "firebase-tools": "^15.34.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "lint": "expo lint",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "backend:start": "firebase emulators:start --project demo-lensflow --only auth,firestore",
+    "backend:seed": "node backend/scripts/seed-emulators.mjs",
+    "backend:owner": "node backend/scripts/provision-owner.mjs",
+    "test:backend": "node scripts/test-backend.cjs"
+  },
+  "private": true,
+  "packageManager": "npm@11.7.0"
+}
