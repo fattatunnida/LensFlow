@@ -44,20 +44,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
     let stopped = false;
     let generation = 0;
     let stopMembership: Unsubscribe | undefined;
+    let stopProfile: Unsubscribe | undefined;
+    let stopStudio: Unsubscribe | undefined;
     let stopAuth: Unsubscribe | undefined;
     let stopForeground: { remove(): void } | undefined;
+    let authenticatedUid: string | null = null;
     const alive = (version: number) => !stopped && generation === version;
 
       const { auth, db } = configuration.client;
-      const check = async (user: User | null) => {
+      const check = async (user: User | null, blocking = false) => {
         const version = ++generation;
         stopMembership?.();
+        stopProfile?.();
+        stopStudio?.();
         stopMembership = undefined;
         if (!user) {
+          authenticatedUid = null;
           if (!stopped) setState({ status: 'signedOut', message: signedOutMessage.current });
           return;
         }
-        setState({ status: 'loading' });
+        // Credential refresh for the same identity must preserve form navigation.
+        // Startup and foreground checks still block until server access is known.
+        if (blocking || authenticatedUid !== user.uid) setState({ status: 'loading' });
         try {
           const profileDoc = await withTimeout(getDocFromServer(doc(db, 'users', user.uid)));
           if (!alive(version)) return;
@@ -72,12 +80,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
           const studio = await withTimeout(getDocFromServer(doc(db, 'studios', profile.studioId)));
           if (!alive(version)) return;
           const session = parseSession(user.uid, profile, member.data(), studio.data());
+          authenticatedUid = user.uid;
           setState({ status: 'authenticated', session });
+
+          let latestProfile: Record<string, unknown> | undefined = profile;
+          let latestStudio = studio.data(), latestMember = member.data();
+          const emitMetadata = () => {
+            if (!alive(version)) return;
+            try { setState({ status: 'authenticated', session: parseSession(user.uid, latestProfile, latestMember, latestStudio) }); }
+            catch { setState({ status: 'unavailable', message: 'Data akun berubah. Periksa koneksi dan muat ulang akses studio.' }); }
+          };
+          const metadataError = () => { if (alive(version)) setState({ status: 'unavailable', message: 'Data akun belum dapat diperbarui. Silakan coba lagi.' }); };
+          stopProfile = onSnapshot(doc(db, 'users', user.uid), snapshot => { if (alive(version) && !snapshot.metadata.fromCache) { latestProfile = snapshot.data(); emitMetadata(); } }, metadataError);
+          stopStudio = onSnapshot(doc(db, 'studios', profile.studioId), snapshot => { if (alive(version) && !snapshot.metadata.fromCache) { latestStudio = snapshot.data(); emitMetadata(); } }, metadataError);
 
           stopMembership = onSnapshot(memberRef, (snapshot) => {
             if (!alive(version) || snapshot.metadata.fromCache) return;
             try {
-              const latest = parseSession(user.uid, profile, snapshot.data(), studio.data());
+              latestMember = snapshot.data();
+              const latest = parseSession(user.uid, latestProfile, latestMember, latestStudio);
               setState({ status: 'authenticated', session: latest });
             } catch {
               signedOutMessage.current = 'Akses akun Anda telah dinonaktifkan. Hubungi pemilik studio.';
@@ -107,7 +128,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (!stopped) setState({ status: 'unavailable', message: 'Sesi belum dapat diperiksa. Silakan coba lagi.' });
       });
       stopForeground = AppState.addEventListener('change', (status) => {
-        if (status === 'active' && auth.currentUser) void check(auth.currentUser);
+        if (status === 'active' && auth.currentUser) void check(auth.currentUser, true);
       });
 
     return () => {
@@ -115,6 +136,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       generation++;
       stopAuth?.();
       stopMembership?.();
+      stopProfile?.();
+      stopStudio?.();
       stopForeground?.remove();
     };
   }, [attempt, configuration]);

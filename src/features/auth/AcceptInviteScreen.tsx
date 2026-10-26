@@ -1,0 +1,30 @@
+import { useEffect,useRef,useState } from 'react';
+import { Link,useLocalSearchParams } from 'expo-router';
+import { Text,View } from 'react-native';
+import { deleteApp,initializeApp,type FirebaseApp } from 'firebase/app';
+import { connectAuthEmulator,createUserWithEmailAndPassword,initializeAuth,inMemoryPersistence,sendEmailVerification,signInWithEmailAndPassword,type Auth } from 'firebase/auth';
+import { connectFirestoreEmulator,getFirestore,type Firestore } from 'firebase/firestore';
+import { AuthShell } from '../../components/AuthShell';
+import { AuthField } from '../../components/AuthField';
+import { Button } from '../../components/Button';
+import { getFirebaseClient } from '../../lib/firebase/client';
+import { authErrorMessage } from '../../lib/auth/validation';
+import { newMasterId } from '../master-data/repository';
+import { masterStyles as s } from '../master-data/ui';
+import { claimInvitation } from '../spark/management';
+import { projectError } from '../management/data';
+import { useAuth } from './AuthProvider';
+type Temporary={app:FirebaseApp;auth:Auth;db:Firestore};
+export default function AcceptInviteScreen(){
+  const params=useLocalSearchParams<{studioId?:string;inviteId?:string;email?:string}>(),studioId=typeof params.studioId==='string'?params.studioId:'',inviteId=typeof params.inviteId==='string'?params.inviteId:'',email=typeof params.email==='string'?params.email:'';
+  const {login}=useAuth(),[name,setName]=useState(''),[password,setPassword]=useState(''),[confirmation,setConfirmation]=useState(''),[stage,setStage]=useState<'account'|'verify'>('account'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[cooldown,setCooldown]=useState(0),temporary=useRef<Temporary|null>(null),lock=useRef(false),alive=useRef(false),hasCooldown=cooldown>0;
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;const app=temporary.current?.app;if(app)void deleteApp(app).catch(()=>{});};},[]);
+  useEffect(()=>{if(!hasCooldown)return;const timer=setInterval(()=>setCooldown(v=>Math.max(0,v-1)),1000);return()=>clearInterval(timer);},[hasCooldown]);
+  const valid=/^[A-Za-z0-9_-]{1,128}$/.test(studioId)&&inviteId===email&&/^[a-z0-9._+%-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email);
+  function client(){if(temporary.current)return temporary.current;const main=getFirebaseClient(),app=initializeApp(main.auth.app.options,`invite-${newMasterId(main.db)}`),auth=initializeAuth(app,{persistence:inMemoryPersistence}),db=getFirestore(app);if(main.emulator){const host=process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST||'127.0.0.1';connectAuthEmulator(auth,`http://${host}:${process.env.EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT||9099}`,{disableWarnings:true});connectFirestoreEmulator(db,host,Number(process.env.EXPO_PUBLIC_FIREBASE_FIRESTORE_EMULATOR_PORT||8082));}temporary.current={app,auth,db};return temporary.current;}
+  async function execute(work:()=>Promise<void>){if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await work();}catch(cause){if(alive.current){const code=(cause as {code?:string}).code;setError(code?.startsWith('app/')?projectError(cause):authErrorMessage(cause));}}finally{lock.current=false;if(alive.current)setBusy(false);}}
+  async function finish(){const c=client(),user=c.auth.currentUser;if(!user)throw new Error('Sesi undangan berakhir');await claimInvitation(c.db,user,studioId,inviteId,name);if(alive.current)await login(email,password);}
+  async function send(){const user=client().auth.currentUser;if(!user)throw new Error('Masuk undangan terlebih dahulu');await sendEmailVerification(user);if(alive.current){setCooldown(60);setMessage('Email verifikasi dikirim. Buka tautannya, lalu kembali ke aplikasi.');}}
+  async function account(register:boolean){if(name.trim().length<2||password.length<12||password.length>128||register&&password!==confirmation){setError('Isi nama dan kata sandi 12–128 karakter. Untuk pendaftaran baru, konfirmasi harus sama.');return;}await execute(async()=>{const c=client(),credential=register?await createUserWithEmailAndPassword(c.auth,email,password):await signInWithEmailAndPassword(c.auth,email,password);if(!alive.current)return;setStage('verify');if(credential.user.emailVerified)await finish();else if(register)await send();else setMessage('Buka email verifikasi Anda atau gunakan Kirim verifikasi email.');});}
+  return <AuthShell><View style={{gap:18}}><Text style={s.title}>Terima undangan staf</Text>{!valid?<Text accessibilityRole="alert" style={s.error}>Tautan undangan tidak lengkap. Minta tautan baru dari owner.</Text>:<><Text style={s.text}>{email}</Text>{stage==='account'?<><Text style={s.muted}>Daftar menggunakan email undangan, atau masuk jika sudah memiliki akun. Akses studio diberikan setelah email terverifikasi.</Text><AuthField label="Nama staf undangan" value={name} onChangeText={setName} maxLength={100} editable={!busy}/><AuthField label="Kata sandi undangan" password value={password} onChangeText={setPassword} editable={!busy}/><AuthField label="Konfirmasi kata sandi undangan" password value={confirmation} onChangeText={setConfirmation} editable={!busy}/><Button label="Daftarkan akun staf" tone="brand" loading={busy} onPress={()=>{void account(true);}}/><Button label="Masuk undangan" secondary disabled={busy} onPress={()=>{void account(false);}}/></>:<><Text style={s.muted}>Verifikasi email untuk memastikan undangan diterima pemilik alamat yang benar. Setelah verifikasi, tekan tombol di bawah.</Text><Button label="Saya sudah verifikasi email" tone="brand" loading={busy} onPress={()=>{void execute(finish);}}/><Button label={cooldown?`Kirim ulang (${cooldown} detik)`:'Kirim verifikasi email'} secondary disabled={busy||hasCooldown} onPress={()=>{void execute(send);}}/></>}{!!message&&<Text accessibilityRole="alert" style={s.text}>{message}</Text>}{!!error&&<Text accessibilityRole="alert" style={s.error}>{error}</Text>}</>}<Link href="/login" style={s.text}><Text>Kembali ke Login</Text></Link></View></AuthShell>;
+}

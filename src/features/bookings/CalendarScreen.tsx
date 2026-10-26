@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { router,useLocalSearchParams } from 'expo-router';
 import { FlatList,Pressable,Text,View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
@@ -13,7 +13,12 @@ import { useSessions } from './hooks';
 import { canManageBookings,dateWib,dayStart,shiftDate } from './models';
 import { BookingRow } from './ui';
 export default function CalendarScreen(){
-  const [view,setView]=useState<'day'|'week'>('day'),[date,setDate]=useState(()=>dateWib()),[input,setInput]=useState(date),[error,setError]=useState('');
+  const params=useLocalSearchParams<{date?:string}>(),requestedDate=typeof params.date==='string'?params.date:'';
+  const ms=dayStart(requestedDate),initialDate=/^20\d\d-\d\d-\d\d$/.test(requestedDate)&&Number.isFinite(ms)&&dateWib(ms)===requestedDate?requestedDate:dateWib();
+  return <CalendarView key={requestedDate} initialDate={initialDate}/>;
+}
+function CalendarView({initialDate}:{initialDate:string}){
+  const [view,setView]=useState<'day'|'week'>('day'),[date,setDate]=useState(initialDate),[input,setInput]=useState(date),[error,setError]=useState('');
   const weekday=new Date(`${date}T00:00:00Z`).getUTCDay(),start=view==='day'?date:shiftDate(date,-((weekday+6)%7)),end=shiftDate(start,view==='day'?1:7),resource=useSessions({from:dayStart(start),to:dayStart(end)});
   const items=resource.items.filter(item=>item.sessionStatus!=='cancelled');
   function choose(value:string){setDate(value);setInput(value);setError('');}

@@ -20,7 +20,7 @@ export const canManageBookings = (actor:MasterActor|null) => !!actor && (actor.r
 export const canReadSchedule = (actor:MasterActor|null) => !!actor && (actor.role === 'owner' || actor.booking || actor.crm);
 export function bookingError(error:unknown):string {
   const e = error as { code?:string; message?:string };
-  if (e.code?.startsWith('functions/') && !['functions/internal','functions/unavailable','functions/deadline-exceeded'].includes(e.code)) return e.message || 'Permintaan belum dapat diproses.';
+  if ((e.code?.startsWith('app/')||e.code?.startsWith('functions/')) && !['functions/internal','functions/unavailable','functions/deadline-exceeded'].includes(e.code)) return e.message || 'Permintaan belum dapat diproses.';
   if (e.code === 'permission-denied') return 'Anda tidak memiliki izin membaca booking ini.';
   return 'Data belum dapat diproses. Periksa koneksi, lalu coba lagi dengan isian yang sama.';
 }

@@ -1,62 +1,55 @@
-# QA Tahap 5 — Keuangan
+> QA terkini: migrasi Firestore Spark dan deployment cloud telah selesai. Lihat [Firestore Spark QA](docs/qa/Firestore_Spark_QA.md). Catatan tahap sebelumnya di bawah bersifat historis.
 
-26 Oktober 2026. Catatan Tahap 4 dipertahankan di `docs/qa/Tahap_4_QA.md`; QA sebelumnya tetap tersedia. Lingkungan terverifikasi adalah emulator project demo-lensflow dan SDK aplikasi, bukan Firebase cloud atau perangkat fisik.
+# QA Tahap 7–8 dan Regresi Tahap 9
 
-## Status
+26 Oktober 2026. QA Tahap 6 disimpan di docs/qa/Tahap_6_QA.md. Lingkungan: Expo SDK 58, Chromium headless terpisah, Firebase Auth/Firestore/Functions emulator demo-lensflow. Tidak ada deployment cloud atau build terpasang di perangkat fisik.
 
-Implementasi: Keuangan dari Lainnya, daftar dan detail transaksi, filter bulan/metode/jenis, konteks booking minimum, DP/pelunasan, pengeluaran owner, refund owner yang merujuk pembayaran asal, ringkasan kas dan pembaruan status/saldo booking. Login/splash tetap memakai implementasi sebelumnya. Beranda masih pratinjau sampai Tahap 6.
+## Hasil akhir
 
-Lint dan TypeScript lulus. **28 test aplikasi + 52 test integrasi = 80 lulus**. Ekspor bundle Android/iOS/web lulus. Tidak dinyatakan lulus pengujian klik/layout/screenshot atau perangkat fisik.
+- Lint: lulus tanpa warning. TypeScript: lulus.
+- 31 unit + 75 integrasi emulator = 106 lulus. Pengujian manajemen terakhir: 9/9 lulus.
+- Dua skenario E2E operasional dan manajemen: lulus. Manajemen diuji ulang setelah perbaikan grafik dan undang ulang: lulus.
+- Ekspor Android/iOS/web: lulus. Ekspor bukan pengujian runtime native.
+- Tidak ada pageerror atau Unexpected text node sepanjang skenario E2E.
 
-## Bukti layanan dan SDK
+## Layanan dan SDK
 
-| Kasus | Hasil |
-|---|---|
-| Multiple DP lalu Pelunasan | Nominal tersimpan sekali; saldo dan paymentStatus tepat |
-| Pelunasan sebagai pembayaran pertama | Seluruh harga diterima tepat, tanpa DP nol |
-| DP sama/melebihi sisa, settlement kurang, nol/negatif/pecahan/overflow | Ditolak tanpa perubahan saldo |
-| Retry receipt sama | Hasil awal dikembalikan; audit/entry tidak bertambah |
-| Mutation dipakai dengan payload berbeda | Ditolak |
-| Entry ID sama dengan mutation baru | Ditolak; dapat diperiksa melalui detail entry |
-| Dua pelunasan bersamaan | Hanya satu diterima; tidak ada overpayment |
-| Bayar dan batal bersamaan | Hanya satu perubahan versi diterima |
-| Refund sebelum batal atau lintas pembayaran/booking | Ditolak |
-| Refund parsial dan penuh tiap asal | Batas asal terjaga; original ledger tidak diubah |
-| Dua refund bersamaan | Tidak melampaui saldo refundable |
-| Pembatalan saja | Tidak mencatat refund otomatis |
-| Booking done belum lunas | Tetap dapat menerima pembayaran |
-| Owner expense | Tidak mengubah saldo booking; retry tidak menggandakan pengeluaran |
-| Staf pembayaran/laporan/booking/CRM | Batas baca/tulis ditegakkan server, bukan hanya UI |
-| Revoke, membership nonaktif, anonim, studio lain, boolean salah tipe | Ditolak; replay juga memerlukan izin aktif |
-| Write/update/delete langsung ke ledger/cache/counter | Ditolak, termasuk bagi owner |
-| Tanggal palsu/masa depan, backdate staf, sebelum transaksi asal | Ditolak |
-| Cache saldo tidak sesuai ledger | Posting ditolak dan meminta rekonsiliasi |
-| Pagination | Ledger 25+3, picker booking 25+2, pembayaran asal 25+2 terbaca tanpa duplikasi/hilang |
-| Audit akhir | Setiap entry posted cocok dengan booking, projection, akun saldo, counter refund dan cache kas bulan/metode |
-| SDK aplikasi | Booking → DP → lunas → batal → refund → expense → detail/filter/ringkasan lulus |
-| Regresi Tahap 4 | Bentrok create/reschedule, adjacent slots, versi, snapshots, kalender dan akses tetap lulus |
+Laporan membaca seluruh ledger pada periode WIB, bukan subtotal halaman atau nilai booking. Bruto/refund/expense/count dan bucket direkonsiliasi dengan transaksi SDK yang benar-benar diposting. Net negatif dipertahankan. Rentang tidak sah/terbalik/masa depan/lebih dari 366 hari ditolak; hari kosong tetap nol. Owner/reports boleh membaca; payments saja, booking, anonim, nonaktif dan studio lain ditolak. Batas 5.000 transaksi eksplisit pada server agar tidak memotong angka diam-diam.
 
-Artefak: `test-results/stage5-unit-tests.log`, `stage5-backend-tests.log`, `stage5-app-sdk.log`, `stage5-verified-export.log`, dan `stage5-verified-export/metadata.json`. Error PERMISSION_DENIED dalam log integrasi merupakan kasus negatif yang disengaja. Fixture hanya pada namespace pengujian; tidak mengisi kas Studio Cahaya.
+Studio owner-only, validasi nama/telepon/jam kelipatan 15 menit/DP 0–100 dan optimistic version diuji. Profil hanya identitas sendiri; email/studio/role tidak dapat ditimpa. Izin staf wajib empat boolean, owner terkunci, versi konflik ditolak. Raw writes studio/profil/member/audit/receipt tetap tertutup termasuk bagi owner aplikasi.
 
-## Pemeriksaan UI yang belum dapat dilakukan
+Undangan membuat Auth user stabil dan membership invited; retry command tidak menggandakan anggota, payload berbeda ditolak. Firebase token reset dipakai sungguhan untuk membuat password, lalu identitas password terautentikasi menerima undangan melalui staffAccept. Anonim, owner dan staf nonaktif tidak dapat menerima. Pembatalan pending dapat diundang ulang tanpa langsung aktif. Penarikan izin/nonaktif menutup akses server. Tidak ada pengiriman email undangan otomatis.
 
-Permintaan awal untuk menguji Booking/Kalender melalui browser dicoba kembali. Runtime kontrol browser tetap gagal sebelum membaca halaman, dengan kegagalan menulis kernel assets karena path tidak ditemukan. Tidak diambil screenshot baru dan screenshot Tahap 3 tidak digunakan sebagai bukti tahap ini. Pembacaan/penulisan SDK serta bundling tidak menggantikan pengujian interaksi.
+Seluruh regresi sebelumnya tetap lulus: Auth, CRM, paket, booking slot/snapshot/version, pembayaran/refund race dan receipt replay, ledger/cache rekonsiliasi, Beranda RBAC, inbox WIB/deduplikasi/retensi/preferensi/paging/worker.
 
-Dari source: daftar utama memakai FlatList, form ScrollView/KeyboardAvoidingView, field berlabel, validasi inline, konfirmasi sebelum posting, single-submit lock, error/retry, draft memori, pembatasan role, serta referensi pembayaran asal pada refund. Ini belum membuktikan hasil layout, urutan fokus, keyboard, safe area atau navigasi di perangkat.
+## Mobile web
 
-Checklist penerimaan manual yang masih terbuka:
+Fixture terpisah e2e-lensflow dan e2e-management, tidak mengubah Studio Cahaya.
 
-1. Booking: pelanggan baru dari draft, pilihan paket, bentrok, reschedule, batal dan kembali ke kalender/list.
-2. DP: input salah dan benar, konfirmasi uang diterima, detail sukses, saldo terbarui, kembali ke booking.
-3. Pelunasan: nominal sesuai sisa terbaru, konflik versi tidak menghapus isian, retry hasil belum pasti tidak membuat entry kedua.
-4. Expense: owner dapat mencatat; staf pembayaran/laporan tidak memperoleh aksi posting keluar.
-5. Refund: booking harus batal, pembayaran asal dapat dibedakan lewat referensi, batas sisa, alasan/konfirmasi, parsial/penuh dan link asal.
-6. Filter periode/metode/jenis, pagination, empty/error/retry, dan ringkasan kas tidak dianggap subtotal halaman.
-7. Role pembayaran tanpa booking dapat memilih konteks minimum; report hanya baca; booking/CRM tidak membuka kas studio.
-8. Layar 320/390 px, nama/nominal panjang, keyboard native, safe area dan Back Android; aksesibilitas dan font scaling.
+Operasional: login → pelanggan baru dari booking → paket/jadwal → DP 150.000 → lunas 350.000 → batal → refund 50.000 → expense 50.000 → kas bersih 400.000. Slot batal dipakai ulang, reschedule, bentrok mempertahankan isian, kalender 320px, Beranda dan inbox, tanda baca, preferensi persist, serta staf tanpa nominal kas lulus.
 
-## Batas hasil
+Manajemen: masuk melalui menu Lainnya, laporan bruto 500.000/refund 50.000/expense 50.000/net 400.000, bulan kosong, validasi kustom dan viewport 320px lulus. Grafik otomatis menunjukkan periode terbaru. Simpan/reload studio 09.00–20.00 dan DP 40% terpakai pada form booking (target 200.000). Edit profil memperbarui sapaan Beranda. Undang → batal → undang ulang → buat password Firebase → login staf → aktif → beri izin laporan → baca laporan → nonaktif → sesi staf berakhir lulus. Ganti password memerlukan autentikasi ulang dan password baru berhasil untuk login baru. FAQ/Tentang terbuka.
 
-Tidak ada transfer bank/QRIS, pembayaran nyata, email/pesan, deployment cloud atau pemasangan build yang dilakukan. Ledger adalah pencatatan manual yang diverifikasi pengguna. Draft hilang bila proses berhenti/reload; riwayat harus diperiksa sebelum membuat catatan baru bila hasil lama belum pasti. Koreksi/reversal dan offline permanen belum diimplementasikan. Source backup bukan backup database emulator.
+Screenshot laporan 390/320px, grafik terkini, pengaturan dan staf diperiksa secara visual: teks/kartu terbaca, tidak melebar keluar halaman. Grafik/filter dapat digeser horizontal. Tautan undangan pada screenshot ditutupi. Ini bukan bukti seluruh Figma sudah sama 1:1.
 
-QA visual 1:1, interaksi langsung Tahap 4–5 dan perangkat fisik tetap terbuka. Backend/SDK selesai diuji tanpa kegagalan yang diketahui; fitur tidak dinyatakan siap produksi berdasarkan bundle/test saja.
+## Artefak
+
+- test-results/stage78-unit-tests.log (31)
+- test-results/stage78-backend-tests.log (75)
+- test-results/stage78-management-tests.log (9 kasus setelah pembetulan assert periode)
+- test-results/stage78-e2e-final.log (dua skenario)
+- test-results/stage78-management-final.log (run terakhir manajemen, termasuk undang ulang/grafik)
+- test-results/stage78-lint.log dan stage78-typecheck.log
+- test-results/stage78-export-final.log dan stage78-export-final/metadata.json
+- test-results/stage78-report.png dan stage78-report-compact.png
+- test-results/stage78-studio.png, stage78-staff.png dan stage78-staff-invitation.png (masked)
+- test-results/stage6-*.png: bukti operasional diperbarui pada run regresi ini
+
+Error PERMISSION_DENIED dalam log backend adalah pengujian negatif yang disengaja. Laporan HTML test-results/e2e-report/index.html mengikuti run E2E yang terakhir dijalankan.
+
+## Yang masih memerlukan penerimaan rilis
+
+Tahap 7–8 inti dan QA otomatis selesai; Tahap 9 belum selesai penuh. Masih terbuka: seluruh Figma 1:1, seluruh state offline/timeout/unsaved changes, keyboard/safe area/splash/performa native, UAT owner/staf, seluruh variasi viewport, deployment/index/billing/Scheduler cloud dan uji produksi. Avatar upload, push perangkat, email undangan otomatis, UI reset custom seluruh state Figma dan App Check produksi belum dibuka. Aplikasi belum dinyatakan siap rilis toko aplikasi.
+
+Project Firebase Anda belum dihubungkan. Panduan konfigurasi/deploy/provisioning/UAT: docs/Hubungkan_Firebase.md. Backup source tidak memuat database atau kredensial lingkungan.
+

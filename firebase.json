@@ -3,11 +3,9 @@
     "rules": "backend/firestore.rules",
     "indexes": "backend/firestore.indexes.json"
   },
-  "functions": [{ "source": "backend/functions", "codebase": "lensflow", "runtime": "nodejs24", "ignore": ["node_modules", "*.log"] }],
   "emulators": {
     "auth": { "host": "0.0.0.0", "port": 9099 },
     "firestore": { "host": "0.0.0.0", "port": 8082 },
-    "functions": { "host": "0.0.0.0", "port": 5001 },
     "ui": { "enabled": true, "host": "127.0.0.1", "port": 4000 },
     "singleProjectMode": true
   }

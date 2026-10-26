@@ -47,6 +47,7 @@ export async function provisionOwner({ projectId, email, password, displayName, 
         name: studioName,
         ownerUid: user.uid,
         timezone: 'Asia/Jakarta',
+        clientBackendVersion: 1,
         openingTime: '08:00', closingTime: '21:00', defaultDpPercent: 30,
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -56,6 +57,7 @@ export async function provisionOwner({ projectId, email, password, displayName, 
     });
     transaction.set(db.doc(`studios/${studioId}/members/${user.uid}`), {
       role: 'owner', status: 'active',
+      displayName, email: user.email,
       permissions: { booking: true, calendarCrm: true, payments: true, reports: true },
       updatedAt: FieldValue.serverTimestamp(),
     });

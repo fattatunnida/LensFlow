@@ -19,9 +19,9 @@ async function ownedFirestoreProcesses() {
   let code = 1;
   try {
     const cli = path.join(root, 'node_modules', 'firebase-tools', 'lib', 'bin', 'firebase.js');
-    const command = `"${process.execPath}" --import tsx --test backend/tests/*.test.mjs`;
+    const command = `"${process.execPath}" --import tsx --test backend/tests/spark-*.test.mjs`;
     code = await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [cli, 'emulators:exec', '--project', 'demo-lensflow', '--only', 'auth,firestore,functions', command], { cwd: root, stdio: 'inherit', windowsHide: true });
+      const child = spawn(process.execPath, [cli, 'emulators:exec', '--project', 'demo-lensflow', '--only', 'auth,firestore', command], { cwd: root, stdio: 'inherit', windowsHide: true });
       child.once('error', reject);
       child.once('exit', (exitCode) => resolve(exitCode ?? 1));
     });

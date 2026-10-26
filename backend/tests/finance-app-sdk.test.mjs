@@ -10,7 +10,7 @@ import { validateClient,validatePackage } from '../../src/features/master-data/v
 import { sendBooking,sessionPage } from '../../src/features/bookings/repository.ts';
 import { dateWib,shiftDate } from '../../src/features/bookings/models.ts';
 import { financeBooking,financeBookings,financeSummary,ledgerPage,readEntry,refundSources,sendFinance } from '../../src/features/finance/repository.ts';
-const require=createRequire(import.meta.url),{signInWithEmailAndPassword}=require('firebase/auth'),{getApp,deleteApp:deleteSdk}=require('firebase/app');
+const require=createRequire(import.meta.url),{signInWithEmailAndPassword}=require('firebase/auth'),{getApp,deleteApp:deleteSdk}=require('firebase/app'),{httpsCallable}=require('firebase/functions');
 for(const host of [process.env.FIREBASE_AUTH_EMULATOR_HOST,process.env.FIRESTORE_EMULATOR_HOST])if(!host||!/^(127\.0\.0\.1|localhost):\d+$/.test(host))throw new Error('SDK tests require loopback emulators.');
 globalThis.__DEV__=true;Object.assign(process.env,{EXPO_PUBLIC_FIREBASE_USE_EMULATORS:'true',EXPO_PUBLIC_FIREBASE_EMULATOR_HOST:'127.0.0.1',EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT:'9099',EXPO_PUBLIC_FIREBASE_FIRESTORE_EMULATOR_PORT:'8082',EXPO_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_PORT:'5001'});
 const admin=initializeApp({projectId:'demo-lensflow'},'finance-sdk-test'),db=getFirestore(admin),auth=getAuth(admin),studioId='finance-sdk-test',uid='f5-app-sdk';
@@ -37,4 +37,5 @@ test('application SDK posts DP, settlement, cancellation, refund and expense wit
   const summary=await financeSummary(studioId,month,'all');assert.deepEqual({income:summary.income,refund:summary.refund,expense:summary.expense,count:summary.count},{income:500000,refund:500000,expense:102700,count:32});
   const transfer=await financeSummary(studioId,month,'transfer'),qris=await financeSummary(studioId,month,'qris');assert.equal(transfer.income+qris.income,summary.income);assert.equal(qris.refund,500000);assert.equal((await financeSummary(studioId,'2020-01','all')).count,0);
   b=await financeBooking(studioId,'booking');assert.equal(b.collectible,0);assert.equal(b.netPaid,0);assert.equal(b.refundStatus,'full');assert.equal(b.receivedAmount,500000);assert.equal((await refundSources(studioId,'booking')).items.every(s=>s.remaining===0),true);
+  const report=(await httpsCallable(getFirebaseClient().functions,'reportsRead')({studioId,from:`${month}-01`,to:today})).data;assert.equal(report.income,summary.income);assert.equal(report.refund,summary.refund);assert.equal(report.expense,summary.expense);assert.equal(report.count,summary.count);assert.equal(report.cashNet,-102700);assert.equal(report.buckets.reduce((sum,b)=>sum+b.income-b.refund-b.expense,0),report.cashNet);
 });

@@ -27,7 +27,7 @@ function MasterEditorScreen({ kind, editing }: { kind: MasterKind; editing: bool
   const saved = (recordId: string) => {
     if (client && !editing && params.forBooking === '1' && resource.actor) {
       handoffBookingClient(resource.actor.uid, resource.actor.studioId, recordId);
-      router.dismissTo('/bookings/new');
+      router.dismissTo({ pathname: '/bookings/new', params: { clientId: recordId } });
       return;
     }
     if (editing && router.canDismiss()) router.dismiss();

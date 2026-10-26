@@ -1,10 +1,9 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, initializeAuth, type Auth } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore';
-import { connectFunctionsEmulator, getFunctions, type Functions } from 'firebase/functions';
 import { authPersistence } from './auth-persistence';
 
-type FirebaseClient = { auth: Auth; db: Firestore; functions: Functions; emulator: boolean };
+type FirebaseClient = { auth: Auth; db: Firestore; emulator: boolean };
 let client: FirebaseClient | undefined;
 
 export function getFirebaseClient(): FirebaseClient {
@@ -24,19 +23,17 @@ export function getFirebaseClient(): FirebaseClient {
   if (!config.apiKey || !config.authDomain || !config.projectId || !config.appId) {
     throw new Error('Konfigurasi Firebase belum lengkap. Periksa .env sesuai README.');
   }
-  const existing = getApps().length > 0;
+  const existing = getApps().some(app=>app.name==='[DEFAULT]');
   const app = existing ? getApp() : initializeApp(config);
   // Fast refresh reuses the existing Auth and emulator connections.
   const auth = existing ? getAuth(app) : initializeAuth(app, { persistence: authPersistence });
   const db = getFirestore(app);
-  const functions = getFunctions(app, process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'asia-southeast2');
   if (emulator && !existing) {
     const host = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST || '127.0.0.1';
     connectAuthEmulator(auth, `http://${host}:${process.env.EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT || '9099'}`, { disableWarnings: true });
     connectFirestoreEmulator(db, host, Number(process.env.EXPO_PUBLIC_FIREBASE_FIRESTORE_EMULATOR_PORT || '8082'));
   }
-  if (emulator) connectFunctionsEmulator(functions, process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST || '127.0.0.1', Number(process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_PORT || '5001'));
   auth.languageCode = 'id';
-  client = { auth, db, functions, emulator };
+  client = { auth, db, emulator };
   return client;
 }

@@ -28,7 +28,7 @@ function NewForm({actor,clientId,date}:{actor:MasterActor;clientId?:string;date?
   const [restored]=useState(()=>!!readDraft(key)),[busy,setBusy]=useState(false),[error,setError]=useState(''),[errors,setErrors]=useState<Record<string,string>>({}),[conflict,setConflict]=useState(false),[notice,setNotice]=useState(''),[stale,setStale]=useState(false),[exists,setExists]=useState(false);
   const lock=useRef(false),alive=useRef(false),prefilled=useRef(false);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
-  function update(patch:Partial<Values>){if(lock.current||!alive.current)return;setDraft(old=>{const next={...old,values:{...old.values,...patch},mutation:undefined};writeDraft(key,next);return next;});setError('');setNotice('');setErrors({});}
+  function update(patch:Partial<Values>){if(lock.current)return;setDraft(old=>{const next={...old,values:{...old.values,...patch},mutation:undefined};writeDraft(key,next);return next;});setError('');setNotice('');setErrors({});}
   useFocusEffect(useCallback(()=>{
     let active=true;const incoming=peekBookingClient(actor.uid,actor.studioId)||(!prefilled.current?clientId:undefined);
     if(incoming)void bookingChoices(actor.studioId,'clients','',null,incoming).then(page=>{if(active&&page.items[0]){update({client:page.items[0],step:0});prefilled.current=true;completeBookingHandoff(actor.uid,actor.studioId,incoming);}},cause=>{if(active)setError(bookingError(cause));});

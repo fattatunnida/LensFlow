@@ -1,0 +1,2 @@
+const { defineConfig }=require('@playwright/test');
+module.exports=defineConfig({testDir:'./e2e',timeout:240000,expect:{timeout:20000},workers:1,fullyParallel:false,retries:0,outputDir:'test-results/e2e',reporter:[['list'],['html',{outputFolder:'test-results/e2e-report',open:'never'}]],use:{baseURL:process.env.E2E_BASE_URL||'http://localhost:8081',headless:true,actionTimeout:20000,viewport:{width:390,height:844},trace:'retain-on-failure',screenshot:'only-on-failure'}});

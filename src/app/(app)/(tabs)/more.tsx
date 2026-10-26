@@ -4,7 +4,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Brand } from '@/components/Brand';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
-import { FeatureNotice, type FeatureMessage } from '@/components/FeatureNotice';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { colors, radii, spacing } from '@/theme/tokens';
 import { useState } from 'react';
@@ -28,6 +27,8 @@ function MenuItem({ icon, label, sublabel, onPress, danger }: MenuItemProps) {
       onPress={onPress}
       style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={sublabel}
     >
       <View style={[styles.menuIcon, danger && styles.menuIconDanger]}>
         <Feather name={icon} size={18} color={danger ? colors.error : colors.ink} />
@@ -51,7 +52,6 @@ export default function MoreScreen() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [logoutError, setLogoutError] = useState('');
-  const [feature, setFeature] = useState<FeatureMessage | null>(null);
   const { logout } = useAuth();
 
   if (state.status !== 'authenticated') return null;
@@ -93,7 +93,7 @@ export default function MoreScreen() {
           label: 'Laporan',
           sublabel: 'Rekap & analisis omzet',
           permission: 'reports',
-          onPress: () => setFeature({ title: 'Laporan', message: 'Ringkasan pemasukan dan pengeluaran per periode segera tersedia.' }),
+          onPress: () => router.push('/reports'),
         },
       ],
     },
@@ -106,13 +106,13 @@ export default function MoreScreen() {
                 icon: 'users' as FeatherIconName,
                 label: 'Kelola Staf',
                 sublabel: 'Undang & atur hak akses',
-                onPress: () => setFeature({ title: 'Kelola staf', message: 'Undangan staf dan pengaturan hak akses studio segera tersedia.' }),
+                onPress: () => router.push('/staff'),
               },
               {
                 icon: 'settings' as FeatherIconName,
                 label: 'Pengaturan Studio',
                 sublabel: 'Jam buka, DP default, dll.',
-                onPress: () => setFeature({ title: 'Pengaturan studio', message: 'Pengaturan jam operasional, kontak dan uang muka studio segera tersedia.' }),
+                onPress: () => router.push('/settings/studio'),
               },
             ],
           },
@@ -125,17 +125,17 @@ export default function MoreScreen() {
           icon: 'user',
           label: 'Profil Saya',
           sublabel: session.displayName,
-          onPress: () => setFeature({ title: 'Profil saya', message: `${session.displayName}\n${session.email}\n${session.studioName}\n${isOwner ? 'Pemilik studio' : 'Staf studio'}` }),
+          onPress: () => router.push('/settings/profile'),
         },
         {
           icon: 'help-circle',
           label: 'Bantuan & FAQ',
-          onPress: () => setFeature({ title: 'Bantuan & FAQ', message: 'Gunakan lima menu di bawah untuk berpindah halaman. Untuk akses studio atau perubahan akun, hubungi pemilik studio Anda.' }),
+          onPress: () => router.push('/help'),
         },
         {
           icon: 'info',
           label: 'Tentang LensFlow',
-          onPress: () => setFeature({ title: 'Tentang LensFlow', message: 'LensFlow membantu studio foto mengelola pelanggan, jadwal pemotretan, booking dan keuangan dalam satu tempat.\n\nVersi 1.0.0' }),
+          onPress: () => router.push('/about'),
         },
       ],
     },
@@ -207,7 +207,6 @@ export default function MoreScreen() {
         loading={logoutBusy}
         error={logoutError}
       />
-      <FeatureNotice feature={feature} onClose={() => setFeature(null)} />
     </SafeAreaView>
   );
 }

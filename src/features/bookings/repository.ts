@@ -1,8 +1,9 @@
 import { collection, doc, getDocFromServer, getDocsFromServer, limit, orderBy, query, startAfter, Timestamp, where, type QueryConstraint, type QueryDocumentSnapshot, type DocumentSnapshot } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
+import { firestoreCall } from '../../lib/firestore-api';
 import { getFirebaseClient } from '../../lib/firebase/client';
 import { serverRead } from '../master-data/repository';
 import type { Booking, BookingEvent, BookingFilter, ChoicePage, ClientChoice, Command, CommandResult, PackageChoice, ScheduleInput, Session } from './models';
+import { context } from '../spark/core';
 
 function validId(id:string):string { if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error('Invalid ID'); return id; }
 function decode<T>(snapshot:DocumentSnapshot):T {
@@ -11,14 +12,14 @@ function decode<T>(snapshot:DocumentSnapshot):T {
   return { ...data, id:snapshot.id, startAt:data.startAt.toMillis(), endAt:data.endAt.toMillis(), updatedAt:data.updatedAt?.toMillis(), createdAt:data.createdAt?.toMillis() } as T;
 }
 export function bookingChoices<K extends 'clients'|'packages'>(studioId:string,kind:K,search='',next:[string,string]|null=null,id?:string) {
-  return httpsCallable<unknown,ChoicePage<K extends 'clients'?ClientChoice:PackageChoice>>(getFirebaseClient().functions,'bookingChoices',{timeout:20000})({studioId,kind,search,next,...(id?{id}:{})}).then((result)=>result.data);
+  return firestoreCall<unknown,ChoicePage<K extends 'clients'?ClientChoice:PackageChoice>>('bookingChoices',{timeout:20000})({studioId,kind,search,next,...(id?{id}:{})}).then((result)=>result.data);
 }
 export function sendBooking(studioId:string,bookingId:string,mutationId:string,command:Command) {
-  return httpsCallable<unknown,CommandResult>(getFirebaseClient().functions,'bookingCommand',{timeout:40000})({studioId,bookingId,mutationId,...command}).then((result)=>result.data);
+  return firestoreCall<unknown,CommandResult>('bookingCommand',{timeout:40000})({studioId,bookingId,mutationId,...command}).then((result)=>result.data);
 }
 export function checkAvailability(studioId:string,input:ScheduleInput,exceptId?:string) {
   const {date,startTime,endTime}=input;
-  return httpsCallable<unknown,{available:boolean}>(getFirebaseClient().functions,'bookingAvailability',{timeout:20000})({studioId,date,startTime,endTime,...(exceptId?{exceptId}:{})}).then((result)=>result.data);
+  return firestoreCall<unknown,{available:boolean}>('bookingAvailability',{timeout:20000})({studioId,date,startTime,endTime,...(exceptId?{exceptId}:{})}).then((result)=>result.data);
 }
 export type SessionQuery = {search?:string;filter?:BookingFilter;from?:number;to?:number;clientId?:string};
 export type SessionPage = {items:Session[];cursor:QueryDocumentSnapshot|null;hasMore:boolean};
@@ -41,6 +42,8 @@ export async function readBooking(studioId:string,id:string,full:boolean):Promis
   return snapshot.exists()?decode<Booking|Session>(snapshot):null;
 }
 export async function bookingEvents(studioId:string,id:string):Promise<BookingEvent[]> {
-  const page=await serverRead(getDocsFromServer(query(collection(getFirebaseClient().db,'studios',validId(studioId),'bookings',validId(id),'events'),orderBy('version','desc'),limit(20))));
-  return page.docs.map((snapshot)=>({...snapshot.data(),id:snapshot.id,createdAt:snapshot.data().createdAt.toMillis()} as BookingEvent));
+  const c=await context(studioId,'booking'),page=await serverRead(getDocsFromServer(query(collection(c.db,'studios',validId(studioId),'bookingMutations'),where('bookingId','==',validId(id)),orderBy('version','desc'),limit(20))));
+  const events=page.docs.map(s=>({...s.data(),id:s.id,createdAt:s.get('createdAt').toMillis()} as BookingEvent));
+  if(c.owner||c.member.permissions.payments||c.member.permissions.reports){const money=await serverRead(getDocsFromServer(query(collection(c.db,'studios',studioId,'transactions'),where('bookingId','==',id),orderBy('expectedVersion','desc'),limit(20))));for(const s of money.docs){const e=s.data();events.push({id:s.id,action:e.kind,actorId:e.createdBy,reason:e.description,version:e.expectedVersion+1,date:e.bookingDate,startTime:e.bookingStartTime,endTime:e.bookingEndTime,createdAt:e.createdAt.toMillis()});}}
+  return events.sort((a,b)=>b.version-a.version).slice(0,20);
 }

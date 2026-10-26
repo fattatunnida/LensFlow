@@ -1,0 +1,33 @@
+import { collection,doc,getDocFromServer,getDocsFromServer,limit,orderBy,query,startAfter,Timestamp,where,type DocumentData,type QueryConstraint,type QueryDocumentSnapshot } from 'firebase/firestore';
+import { getFirebaseClient } from '../../lib/firebase/client';
+export type Data=DocumentData;
+export const DAY=86400000;
+export const dateWib=(ms=Date.now())=>new Date(ms+7*3600000).toISOString().slice(0,10);
+export const dayMs=(date:string)=>Date.parse(`${date}T00:00:00+07:00`);
+export function fail(code:string,message:string,reason=''):never{throw Object.assign(new Error(message),{code:`app/${code}`,details:{reason}});}
+export function identifier(value:unknown):string{if(typeof value!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(value))fail('invalid-argument','Identitas tidak valid.');return value;}
+export function text(value:unknown,min:number,max:number,label:string){if(typeof value!=='string'||value.trim().length<min||value.trim().length>max)fail('invalid-argument',`${label} tidak valid.`);return value.trim();}
+export function validDate(date:unknown):date is string{return typeof date==='string'&&/^20\d\d-\d\d-\d\d$/.test(date)&&Number.isFinite(dayMs(date))&&dateWib(dayMs(date))===date;}
+export const normalize=(value:string)=>value.trim().replace(/\s+/g,' ').toLowerCase();
+export function searchTokens(...values:string[]){const out=new Set<string>();for(const value of values)for(const part of [normalize(value),...normalize(value).split(' ')])for(let i=1;i<=Math.min(part.length,64);i++)out.add(part.slice(0,i));return [...out];}
+export function minute(value:unknown){if(typeof value!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(value))fail('invalid-argument','Gunakan jam HH:mm.');return Number(value.slice(0,2))*60+Number(value.slice(3));}
+export function schedule(d:Data,studio:Data){const start=minute(d.startTime),end=minute(d.endTime);if(!validDate(d.date)||start%15||end%15||end-start<15||start<minute(studio.openingTime??'08:00')||end>minute(studio.closingTime??'21:00'))fail('invalid-argument','Periksa tanggal, jam operasional dan kelipatan 15 menit.');const startMs=dayMs(d.date)+start*60000,endMs=dayMs(d.date)+end*60000;if(startMs<Date.now()||startMs>Date.now()+731*DAY)fail('invalid-argument','Pilih jadwal mendatang dalam dua tahun.');return {date:d.date,startTime:d.startTime,endTime:d.endTime,startAt:Timestamp.fromMillis(startMs),endAt:Timestamp.fromMillis(endMs)};}
+export function rootRef(studioId:string){return doc(getFirebaseClient().db,'studios',identifier(studioId));}
+export const ref=(sid:string,kind:string,id:string)=>doc(collection(rootRef(sid),kind),id);
+export async function context(studioId:string,permission:'booking'|'schedule'|'finance'|'payments'|'reports'|'owner'|'self'='self'){
+  const client=getFirebaseClient(),user=client.auth.currentUser;if(!user)fail('unauthenticated','Silakan masuk kembali.');
+  const [m,s,p]=await Promise.all([getDocFromServer(ref(studioId,'members',user.uid)),getDocFromServer(rootRef(studioId)),getDocFromServer(doc(client.db,'users',user.uid))]);const member=m.data(),studio=s.data(),profile=p.data();
+  if(!studio||profile?.studioId!==studioId||member?.status!=='active'||!['owner','staff'].includes(member.role))fail('permission-denied','Akses studio tidak tersedia.');
+  const owner=member.role==='owner',permissions=member.permissions??{},allowed=owner||permission==='self'||permission==='booking'&&permissions.booking===true||permission==='schedule'&&(permissions.booking===true||permissions.calendarCrm===true)||permission==='finance'&&(permissions.payments===true||permissions.reports===true)||permission==='payments'&&permissions.payments===true||permission==='reports'&&permissions.reports===true;
+  if(!allowed)fail('permission-denied','Anda tidak memiliki izin untuk tindakan ini.');return {uid:user.uid,owner,member,studio,profile,db:client.db};
+}
+export function requireSpark(studio:Data){if(studio.clientBackendVersion!==1)fail('failed-precondition','Studio belum disiapkan untuk koneksi Firestore langsung.');}
+export function sessionData(b:Data,id:string){return {bookingId:id,code:b.code,clientId:b.clientId,clientName:b.clientName,packageName:b.packageName,date:b.date,startTime:b.startTime,endTime:b.endTime,startAt:b.startAt,endAt:b.endAt,location:b.location,sessionStatus:b.sessionStatus,paymentStatus:b.paymentStatus,version:b.version,updatedAt:b.updatedAt,stateKey:b.sessionStatus==='done'?'done':b.sessionStatus==='cancelled'?'cancelled':b.paymentStatus,searchTokens:b.searchTokens};}
+export function moneyData(b:Data,id:string){const paid=b.paidAmount??0,refund=b.refundedAmount??0,remaining=b.total-paid+refund;return {bookingId:id,code:b.code,clientName:b.clientName,packageName:b.packageName,date:b.date,startTime:b.startTime,endTime:b.endTime,startAt:b.startAt,sessionStatus:b.sessionStatus,paymentStatus:b.paymentStatus,version:b.version,total:b.total,receivedAmount:paid,refundedAmount:refund,netPaid:paid-refund,remaining,collectible:b.sessionStatus==='cancelled'?0:remaining,dpTarget:b.dpTarget,dpPercent:b.dpPercent,refundStatus:refund===0?'none':refund===paid?'full':'partial',searchTokens:b.searchTokens,updatedAt:b.updatedAt};}
+export function cursorStamp(next:unknown){if(!Array.isArray(next)||next.length!==3||!next.slice(0,2).every(Number.isInteger))fail('invalid-argument','Halaman tidak valid.');return new Timestamp(next[0],next[1]);}
+export async function ledgerPrefix(studioId:string,options:{from?:string;to?:string;bookingId?:string;method?:string}={}){
+  const head=await getDocFromServer(ref(studioId,'financeCounters','main')),ceiling=head.data()?.count??0,items:Data[]=[];let cursor:QueryDocumentSnapshot|undefined;
+  if(ceiling===0)return items;
+  while(true){const clauses:QueryConstraint[]=[where('sequence','<=',ceiling)];if(options.from)clauses.push(where('effectiveAt','>=',Timestamp.fromMillis(dayMs(options.from))));if(options.to)clauses.push(where('effectiveAt','<',Timestamp.fromMillis(dayMs(options.to)+DAY)));if(options.bookingId)clauses.push(where('bookingId','==',options.bookingId));if(options.method&&options.method!=='all')clauses.push(where('method','==',options.method));clauses.push(orderBy('effectiveAt','desc'),orderBy('sequence','desc'));if(cursor)clauses.push(startAfter(cursor));clauses.push(limit(100));const page=await getDocsFromServer(query(collection(rootRef(studioId),'transactions'),...clauses));for(const s of page.docs)items.push({...s.data(),id:s.id});if(items.length>5000)fail('resource-exhausted','Lebih dari 5.000 transaksi. Perpendek periode laporan.');if(page.size<100)break;cursor=page.docs.at(-1);}
+  return items;
+}

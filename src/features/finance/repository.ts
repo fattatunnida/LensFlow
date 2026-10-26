@@ -1,13 +1,14 @@
 import { collection,doc,getDocFromServer,getDocsFromServer,limit,orderBy,query,startAfter,Timestamp,where,type QueryConstraint,type QueryDocumentSnapshot,type DocumentSnapshot } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
+import { firestoreCall } from '../../lib/firestore-api';
 import { getFirebaseClient } from '../../lib/firebase/client';
 import { serverRead } from '../master-data/repository';
+import { summary as sparkSummary } from '../spark/overview';
 import { monthRange,type BookingCursor,type FinanceBooking,type FinanceCommand,type FinancePage,type FinanceResult,type FinanceSummary,type LedgerEntry,type Method,type RefundSource,type SourceCursor } from './models';
 function identifier(value:string){if(!/^[A-Za-z0-9_-]{1,128}$/.test(value))throw new Error('Invalid ID');return value;}
-export function financeBookings(studioId:string,search='',next:BookingCursor|null=null,id?:string){return httpsCallable<unknown,FinancePage<FinanceBooking,BookingCursor>>(getFirebaseClient().functions,'financeBookings',{timeout:20000})({studioId,search,next,...(id?{id}:{})}).then(r=>r.data);}
+export function financeBookings(studioId:string,search='',next:BookingCursor|null=null,id?:string){return firestoreCall<unknown,FinancePage<FinanceBooking,BookingCursor>>('financeBookings',{timeout:20000})({studioId,search,next,...(id?{id}:{})}).then(r=>r.data);}
 export async function financeBooking(studioId:string,id:string):Promise<FinanceBooking|null>{return (await financeBookings(studioId,'',null,identifier(id))).items[0]??null;}
-export function refundSources(studioId:string,bookingId:string,next:SourceCursor|null=null){return httpsCallable<unknown,FinancePage<RefundSource,SourceCursor>>(getFirebaseClient().functions,'financeSources',{timeout:20000})({studioId,bookingId,next}).then(r=>r.data);}
-export function sendFinance(studioId:string,entryId:string,mutationId:string,command:FinanceCommand){return httpsCallable<unknown,FinanceResult>(getFirebaseClient().functions,'financeCommand',{timeout:40000})({studioId,entryId,mutationId,...command}).then(r=>r.data);}
+export function refundSources(studioId:string,bookingId:string,next:SourceCursor|null=null){return firestoreCall<unknown,FinancePage<RefundSource,SourceCursor>>('financeSources',{timeout:20000})({studioId,bookingId,next}).then(r=>r.data);}
+export function sendFinance(studioId:string,entryId:string,mutationId:string,command:FinanceCommand){return firestoreCall<unknown,FinanceResult>('financeCommand',{timeout:40000})({studioId,entryId,mutationId,...command}).then(r=>r.data);}
 function decode(snapshot:DocumentSnapshot):LedgerEntry {
   const d=snapshot.data();if(!d||!['income_dp','income_settlement','expense','refund'].includes(d.kind)||!Number.isSafeInteger(d.amount)||d.amount<=0||!['transfer','qris'].includes(d.method)||!(d.createdAt instanceof Timestamp)||!(d.effectiveAt instanceof Timestamp))throw new Error('Invalid ledger schema');
   return {...d,id:snapshot.id,createdAt:d.createdAt.toMillis(),effectiveAt:d.effectiveAt.toMillis()} as LedgerEntry;
@@ -26,8 +27,5 @@ export async function ledgerPage(studioId:string,options:LedgerQuery,cursor?:Que
   return {items:visible.map(decode),cursor:visible.at(-1)??null,hasMore:page.size>25};
 }
 export async function financeSummary(studioId:string,month:string,method:'all'|Method):Promise<FinanceSummary>{
-  if(!monthRange(month)||!['all','transfer','qris'].includes(method))throw new Error('Invalid filter');
-  const snapshot=await serverRead(getDocFromServer(doc(getFirebaseClient().db,'studios',identifier(studioId),'financeMonths',`${month}_${method}`)));
-  if(!snapshot.exists())return {income:0,refund:0,expense:0,count:0,version:0};const d=snapshot.data();
-  if(!['income','refund','expense','count','version'].every(k=>Number.isSafeInteger(d[k])&&d[k]>=0))throw new Error('Invalid summary schema');return d as FinanceSummary;
+  return sparkSummary(studioId,month,method);
 }

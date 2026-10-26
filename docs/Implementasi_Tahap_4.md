@@ -1,3 +1,5 @@
+> Catatan arsitektur historis: koneksi Functions pada tahap ini telah diganti Firestore langsung. Gunakan [panduan Firebase terkini](Hubungkan_Firebase.md) dan [catatan migrasi Spark](Migrasi_Firestore_Spark.md).
+
 # Implementasi Tahap 4 — Booking dan Kalender
 
 26 Oktober 2026. Expo SDK 58, Firebase Auth/Firestore/Functions Emulator, project `demo-lensflow`. Source dan pemeriksaan backend/SDK selesai; penerimaan UI langsung masih terbuka karena alat browser gagal diinisialisasi. Tidak ada deploy cloud atau transaksi uang.

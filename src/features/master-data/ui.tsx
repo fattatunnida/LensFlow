@@ -23,11 +23,11 @@ export const masterStyles = StyleSheet.create({
   card: { backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 16, gap: 12 },
 });
 
-export function goBack(fallback: '/clients' | '/packages' | '/more' | '/bookings' | '/calendar' | '/finance') {
+export function goBack(fallback: '/clients' | '/packages' | '/more' | '/bookings' | '/calendar' | '/finance' | '/home' | '/notifications') {
   if (router.canDismiss()) router.dismiss(); else router.replace(fallback);
 }
 
-export function MasterScreen({ title, children, fallback = '/clients', busy = false }: PropsWithChildren<{ title: string; fallback?: '/clients' | '/packages' | '/more' | '/bookings' | '/calendar' | '/finance'; busy?: boolean }>) {
+export function MasterScreen({ title, children, fallback = '/clients', busy = false }: PropsWithChildren<{ title: string; fallback?: '/clients' | '/packages' | '/more' | '/bookings' | '/calendar' | '/finance' | '/home' | '/notifications'; busy?: boolean }>) {
   return <SafeAreaView style={masterStyles.safe}>
     <KeyboardAvoidingView style={masterStyles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={masterStyles.page}>

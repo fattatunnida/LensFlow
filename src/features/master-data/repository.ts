@@ -96,11 +96,13 @@ export async function saveMaster<K extends MasterKind>(db: Firestore, actor: Mas
     if (expectedVersion === null) {
       if (snapshot.exists()) throw new MasterDataError('conflict');
       transaction.set(ref, { ...value, version: 1, mutationId, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: actor.uid, updatedBy: actor.uid });
+      if(kind==='clients')transaction.set(doc(db,'studios',actor.studioId,'clientChoices',id),{name:value.name,nameKey:value.nameKey,phone:(value as MasterPayloads['clients']).phone,email:(value as MasterPayloads['clients']).email,version:1});
       return { id, version: 1 };
     }
     if (!snapshot.exists()) throw new MasterDataError('missing');
     if (current?.version !== expectedVersion) throw new MasterDataError('conflict');
     transaction.update(ref, { ...value, version: expectedVersion + 1, mutationId, updatedAt: serverTimestamp(), updatedBy: actor.uid });
+    if(kind==='clients')transaction.set(doc(db,'studios',actor.studioId,'clientChoices',id),{name:value.name,nameKey:value.nameKey,phone:(value as MasterPayloads['clients']).phone,email:(value as MasterPayloads['clients']).email,version:expectedVersion+1});
     return { id, version: expectedVersion + 1 };
   }, { maxAttempts: 3 });
 }

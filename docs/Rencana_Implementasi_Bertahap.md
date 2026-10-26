@@ -155,7 +155,7 @@ Untuk menjaga kualitas kode, kepatuhan arsitektur Expo/React Native, kebersihan 
   - Visualisasi slot waktu studio dan penanda sesi foto.
 - **Hasil Uji**: Booking tersimpan dengan snapshot akurat, deteksi bentrok terverifikasi, kalender membaca data yang sama dengan list booking.
 
-Status 26 Oktober 2026: kontrak data dan backend/SDK sudah lulus pengujian, ekspor tiga platform berhasil. Kalender memakai agenda berurutan per jam/hari dengan pilihan Hari/Minggu. Penerimaan interaksi UI, layar kecil dan visual 1:1 masih perlu pengujian langsung. Filter menampilkan Menunggu DP, DP Dibayar, Lunas, Selesai dan Batal; sesi confirmed terpisah dari paymentStatus. Tidak ada pencatatan uang pada Tahap 4.
+Status 26 Oktober 2026: kontrak data dan backend/SDK lulus pengujian, ekspor tiga platform berhasil. Pada QA Tahap 6, interaksi mobile web untuk pelanggan baru dari draft booking, simpan, reschedule, batal, pemakaian ulang slot, bentrok dan kalender juga lulus. Kalender 320px tidak overflow horizontal. Kalender memakai agenda per jam/hari dengan pilihan Hari/Minggu. Kecocokan seluruh Figma dan perangkat fisik masih perlu pengujian. Sesi confirmed terpisah dari paymentStatus; pencatatan uang mulai Tahap 5.
 
 ---
 
@@ -175,7 +175,7 @@ Status 26 Oktober 2026: kontrak data dan backend/SDK sudah lulus pengujian, eksp
   - Alur refund terkontrol oleh owner yang merujuk pada transaksi penerimaan asal.
 - **Hasil Uji**: Idempotensi transaksi, saldo booking terhitung tepat, tidak ada uang tercatat ganda.
 
-Status 26 Oktober 2026: command dan repository SDK lulus uji, termasuk race pembayaran/refund, refund per pembayaran asal, versi booking, isolasi studio, immutable ledger, tanggal efektif WIB, dan rekonsiliasi cache kas. Ringkasan kas bulan/metode diperbarui atomik, refund dipisahkan dari pengeluaran. UI telah terpasang tetapi belum diuji klik/screenshot/perangkat fisik. Backdate owner default maksimal 30 hari (konfigurasi Admin `maxFinanceBackdateDays`), staf hanya hari ini; koreksi/reversal posted belum dibuka.
+Status 26 Oktober 2026: command dan repository SDK lulus uji, termasuk race pembayaran/refund, refund per pembayaran asal, versi booking, isolasi studio, immutable ledger, tanggal efektif WIB, dan rekonsiliasi cache kas. Ringkasan kas bulan/metode diperbarui atomik, refund dipisahkan dari pengeluaran. QA Tahap 6 menambahkan uji klik dan screenshot mobile web DP → pelunasan → batal/refund → expense dengan saldo tepat. Perangkat fisik belum diuji. Backdate owner default maksimal 30 hari (konfigurasi Admin `maxFinanceBackdateDays`), staf hanya hari ini; koreksi/reversal posted belum dibuka.
 
 ---
 
@@ -191,6 +191,8 @@ Status 26 Oktober 2026: command dan repository SDK lulus uji, termasuk race pemb
   - Daftar notifikasi operasional: Pengingat pelunasan H-3/H-1, jadwal hari ini, konfirmasi pembayaran masuk.
 - **Hasil Uji**: Beranda menampilkan ringkasan tepat sesuai izin pengguna (staf tanpa izin finansial tidak melihat nominal kas).
 
+Status 26 Oktober 2026: Beranda, inbox dan preferensi pribadi selesai pada emulator. Kas masuk bruto dan refund dihitung dari ledger hari WIB; lima sesi terdekat berasal dari data tersimpan. Ringkasan mulai 07.00 dan pengingat H-3/H-1 mulai 09.00 WIB, inbox 30 hari, tanda baca, cursor, deduplikasi dan pemeriksaan ulang izin/data sumber telah diuji. 30 unit + 66 integrasi lulus; uji mobile web end-to-end juga lulus. Worker lokal terverifikasi; scheduler cloud tersedia dalam source tetapi belum dideploy. Push perangkat tidak termasuk. Detail: `docs/Implementasi_Tahap_6.md` dan `design-qa.md`.
+
 ---
 
 ### Tahap 7: Laporan Keuangan, Grafik Omzet & Analisis Bisnis
@@ -199,9 +201,11 @@ Status 26 Oktober 2026: command dan repository SDK lulus uji, termasuk race pemb
 - **7.1 Halaman Laporan (`src/app/(app)/reports/index.tsx`)**:
   - Filter periode (Bulan ini, Bulan lalu, Tahun ini, Custom range).
   - Ringkasan Metrik: Total Pemasukan Bruto, Total Refund, Pemasukan Bersih, Pengeluaran, Kas Bersih Studio.
-  - Grafik Batang/Tren visual pendapatan mingguan/bulanan berbasis SVG / React Native Canvas.
+  - Grafik batang native View untuk pemasukan bruto dan kas keluar, dengan rincian angka dan label aksesibilitas.
   - Rincian breakdown transaksi kas masuk & keluar.
 - **Hasil Uji**: Rekonsiliasi kas Rp 0 selisih, grafik responsif di berbagai resolusi layar.
+
+Status 26 Oktober 2026: laporan periode bulan ini/lalu, tahun ini dan rentang kustom telah diimplementasikan. Agregasi ledger dan bucket harian/mingguan/bulanan direkonsiliasi dengan kas aktual, termasuk net negatif. Server menegakkan izin reports, batas 366 hari dan 5.000 transaksi. UI diuji pada 390px/320px. Detail: `docs/Implementasi_Tahap_7_8.md`.
 
 ---
 
@@ -223,10 +227,14 @@ Status 26 Oktober 2026: command dan repository SDK lulus uji, termasuk race pemb
   - Edit nama, nomor telepon pribadi, dan ganti kata sandi.
 - **8.5 Bantuan, FAQ, & Tentang Aplikasi**.
 
+Status 26 Oktober 2026: studio/profil versioned, ganti password dengan autentikasi ulang, daftar/paging staf, empat izin, undangan pending → password Firebase → login/accept, undang ulang dan pencabutan akses telah diimplementasikan. Owner terkunci. Tautan undangan dibagikan manual; email otomatis dan avatar upload belum dibuka. Firebase masih emulator, panduan cloud: `docs/Hubungkan_Firebase.md`.
+
 ---
 
 ### Tahap 9: Edge States, QA Visual & Polish Aksesibilitas
 > **Tujuan**: Pemeriksaan visual komparatif menyeluruh terhadap desain Figma, pengujian ukuran layar ekstrim, dan penanganan kegagalan jaringan.
+
+Status: QA otomatis backend/SDK serta alur mobile web operasional/manajemen sudah dijalankan. Label menu diperjelas untuk aksesibilitas, input/konflik mempertahankan isian dan grafik menampilkan periode terkini. Pemeriksaan seluruh Figma 1:1, seluruh state offline/timeouts/unsaved changes, keyboard/safe area perangkat fisik dan UAT owner/staf tetap terbuka; tahap ini belum dinyatakan selesai penuh atau siap rilis produksi.
 
 - Pemeriksaan 1:1 terhadap Figma (spasi, font-size, line-height, corner radius).
 - Verifikasi state: Loading skeletons, Empty states (Booking kosong, Pelanggan kosong), Offline/Network failure retry.

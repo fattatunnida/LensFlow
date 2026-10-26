@@ -11,9 +11,10 @@ service cloud.firestore {
     function membership(studioId) {
       return get(/databases/$(database)/documents/studios/$(studioId)/members/$(request.auth.uid)).data;
     }
-    function owner(studioId) { return activeMember(studioId) && membership(studioId).role == 'owner'; }
+    function owner(studioId) { let m=membership(studioId); return signedIn() && m.status=='active' && m.role=='owner'; }
     function permitted(studioId, permission) {
-      return activeMember(studioId) && (membership(studioId).role == 'owner' || membership(studioId).permissions[permission] == true);
+      let m=membership(studioId);
+      return signedIn() && m.status=='active' && (m.role=='owner' || m.role=='staff' && m.permissions[permission]==true);
     }
     function boundedList() { return request.query.limit > 0 && request.query.limit <= 100; }
     function validName(d) {
@@ -52,25 +53,281 @@ service cloud.firestore {
         && d.description is string && d.description.size() <= 1000 && d.isActive is bool;
     }
 
-    // Provisioned by trusted Admin scripts. A client cannot choose its own
+    function spark(s) { return get(/databases/$(database)/documents/studios/$(s)).data.get('clientBackendVersion',0) == 1; }
+    function canBook(s) { return permitted(s,'booking'); }
+    function canMoney(s) { return permitted(s,'payments') || permitted(s,'reports'); }
+    function shortText(v,n) { return v is string && v.size() <= n && v == v.trim(); }
+    function two(n) { return n < 10 ? '0'+string(n) : string(n); }
+    function wibDate(t) { let z=timestamp.value(t.toMillis()+25200000); return string(z.year())+'-'+two(z.month())+'-'+two(z.day()); }
+    function wibTime(t) { let z=timestamp.value(t.toMillis()+25200000); return two(z.hours())+':'+two(z.minutes()); }
+    function income(k) { return k in ['income_dp','income_settlement']; }
+    function financial(k) { return income(k) || k == 'refund'; }
+    function state(b) { return b.sessionStatus == 'done' ? 'done' : b.sessionStatus == 'cancelled' ? 'cancelled' : b.paymentStatus; }
+    function publicSession(b,id) {
+      return {'bookingId':id,'code':b.code,'clientId':b.clientId,'clientName':b.clientName,'packageName':b.packageName,'date':b.date,'startTime':b.startTime,'endTime':b.endTime,'startAt':b.startAt,'endAt':b.endAt,'location':b.location,'sessionStatus':b.sessionStatus,'paymentStatus':b.paymentStatus,'version':b.version,'updatedAt':b.updatedAt,'stateKey':state(b),'searchTokens':b.searchTokens};
+    }
+    function publicMoney(b,id) {
+      let remain=b.total-b.paidAmount+b.refundedAmount;
+      return {'bookingId':id,'code':b.code,'clientName':b.clientName,'packageName':b.packageName,'date':b.date,'startTime':b.startTime,'endTime':b.endTime,'startAt':b.startAt,'sessionStatus':b.sessionStatus,'paymentStatus':b.paymentStatus,'version':b.version,'total':b.total,'receivedAmount':b.paidAmount,'refundedAmount':b.refundedAmount,'netPaid':b.paidAmount-b.refundedAmount,'remaining':remain,'collectible':b.sessionStatus=='cancelled'?0:remain,'dpTarget':b.dpTarget,'dpPercent':b.dpPercent,'refundStatus':b.refundedAmount==0?'none':b.refundedAmount==b.paidAmount?'full':'partial','searchTokens':b.searchTokens,'updatedAt':b.updatedAt};
+    }
+    function projections(s,id,b) {
+      let session=getAfter(/databases/$(database)/documents/studios/$(s)/sessions/$(id)).data;
+      let money=getAfter(/databases/$(database)/documents/studios/$(s)/financeContexts/$(id)).data;
+      return session.version==b.version && session.updatedAt==request.time && money.version==b.version && money.updatedAt==request.time;
+    }
+    function receiptReady(s,id,b) {
+      let rid=request.auth.uid+'_'+b.mutationId;
+      let p=/databases/$(database)/documents/studios/$(s)/bookingMutations/$(rid);
+      let r=getAfter(p).data;
+      return !exists(p) && r.bookingId==id && r.uid==request.auth.uid && r.version==b.version && r.action==b.writeAction && r.createdAt==request.time;
+    }
+    function validSchedule(s,b) {
+      let studio=get(/databases/$(database)/documents/studios/$(s)).data;
+      return b.startAt is timestamp && b.endAt is timestamp && b.startAt>=request.time && b.startAt<=request.time+duration.value(731,'d')
+        && b.endAt.toMillis()-b.startAt.toMillis()>=900000 && b.startAt.toMillis()%900000==0 && b.endAt.toMillis()%900000==0
+        && b.date==wibDate(b.startAt) && b.date==wibDate(b.endAt) && b.startTime==wibTime(b.startAt) && b.endTime==wibTime(b.endAt)
+        && b.startTime>=studio.get('openingTime','08:00') && b.endTime<=studio.get('closingTime','21:00');
+    }
+    function lockReady(s,date,id,b,present) {
+      let lock=getAfter(/databases/$(database)/documents/studios/$(s)/scheduleLocks/$(date)).data;
+      return lock.updatedAt==request.time && lock.updatedBy==request.auth.uid && lock.lastMutation==b.mutationId && lock.changedBooking==id
+        && (present ? lock.entries[id]=={'startMs':b.startAt.toMillis(),'endMs':b.endAt.toMillis()} : !(id in lock.entries));
+    }
+    function bookingCode(n) { return 'BK-'+(n<10?'00000':n<100?'0000':n<1000?'000':n<10000?'00':n<100000?'0':'')+string(n); }
+    function bookCreate(s,id,b) {
+      let client=get(/databases/$(database)/documents/studios/$(s)/clientChoices/$(b.clientId)).data;
+      let p=get(/databases/$(database)/documents/studios/$(s)/packages/$(b.packageId)).data;
+      let count=getAfter(/databases/$(database)/documents/studios/$(s)/bookingCounters/main).data;
+      let studio=get(/databases/$(database)/documents/studios/$(s)).data;
+      return canBook(s) && b.keys().hasOnly(['bookingId','code','clientId','packageId','clientName','clientPhone','clientEmail','packageName','packageSnapshot','total','paidAmount','refundedAmount','netPaidAmount','refundStatus','dpPercent','dpTarget','paymentStatus','sessionStatus','notes','location','cancellationReason','createdBy','createdAt','version','lastEntryId','date','startTime','endTime','startAt','endAt','updatedBy','updatedAt','writeAction','mutationId','writeReason','searchTokens'])
+        && b.bookingId==id && b.writeAction=='create' && b.version==1 && b.createdAt==request.time && b.createdBy==request.auth.uid
+        && b.total is int && b.total>0 && b.total<=1000000000 && b.total==p.price && p.isActive==true
+        && b.clientName==client.name && b.clientPhone==client.phone && b.clientEmail==client.email && b.packageName==p.name
+        && b.packageSnapshot=={'name':p.name,'price':p.price,'durationMinutes':p.durationMinutes,'editedPhotosCount':p.editedPhotosCount,'defaultLocation':p.defaultLocation}
+        && b.dpPercent==studio.get('defaultDpPercent',30) && b.dpTarget is int && b.dpTarget*100==p.price*b.dpPercent+50-((p.price*b.dpPercent+50)%100)
+        && b.paidAmount==0 && b.refundedAmount==0 && b.netPaidAmount==0 && b.refundStatus=='none' && b.paymentStatus=='pending_dp'
+        && b.sessionStatus=='confirmed' && b.cancellationReason=='' && b.lastEntryId=='' && b.writeReason==''
+        && b.code==bookingCode(count.value) && count.lastBookingId==id && count.updatedAt==request.time && validSchedule(s,b) && lockReady(s,b.date,id,b,true) && receiptReady(s,id,b);
+    }
+    function bookEdit(s,id,b,old) {
+      let changes=b.diff(old).affectedKeys();
+      return canBook(s) && old.sessionStatus=='confirmed' && receiptReady(s,id,b)
+        && (b.writeAction=='edit' && changes.hasOnly(['location','notes','version','updatedBy','updatedAt','writeAction','mutationId','writeReason','searchTokens']) && b.writeReason==''
+        || b.writeAction=='complete' && old.startAt<=request.time && b.sessionStatus=='done' && changes.hasOnly(['sessionStatus','version','updatedBy','updatedAt','writeAction','mutationId','writeReason','searchTokens']) && b.writeReason==''
+        || b.writeAction=='cancel' && b.sessionStatus=='cancelled' && b.writeReason.size()>=3 && b.cancellationReason==b.writeReason && changes.hasOnly(['sessionStatus','cancellationReason','version','updatedBy','updatedAt','writeAction','mutationId','writeReason','searchTokens']) && lockReady(s,old.date,id,b,false)
+        || b.writeAction=='reschedule' && b.writeReason.size()>=3 && changes.hasOnly(['date','startTime','endTime','startAt','endAt','location','version','updatedBy','updatedAt','writeAction','mutationId','writeReason','searchTokens']) && validSchedule(s,b) && lockReady(s,b.date,id,b,true) && (old.date==b.date || lockReady(s,old.date,id,b,false)));
+    }
+    function bookMoney(s,id,b,old) {
+      let e=getAfter(/databases/$(database)/documents/studios/$(s)/transactions/$(b.lastEntryId)).data;
+      return permitted(s,'payments') && financial(b.writeAction) && (b.writeAction!='refund'||owner(s))
+        && b.diff(old).affectedKeys().hasOnly(['paidAmount','refundedAmount','netPaidAmount','paymentStatus','refundStatus','version','updatedBy','updatedAt','writeAction','mutationId','writeReason','lastEntryId'])
+        && e.createdAt==request.time && e.createdBy==request.auth.uid && e.bookingId==id && e.kind==b.writeAction && e.mutationId==b.mutationId && e.description==b.writeReason
+        && b.paidAmount==old.paidAmount+(income(e.kind)?e.amount:0) && b.refundedAmount==old.refundedAmount+(e.kind=='refund'?e.amount:0)
+        && b.netPaidAmount==b.paidAmount-b.refundedAmount && b.refundedAmount<=b.paidAmount && b.paidAmount<=b.total
+        && b.paymentStatus==(b.netPaidAmount==b.total?'paid':b.paidAmount>0?'dp_paid':'pending_dp')
+        && b.refundStatus==(b.refundedAmount==0?'none':b.refundedAmount==b.paidAmount?'full':'partial');
+    }
+    function bookBase(s,id,b) {
+      return spark(s) && b.updatedAt==request.time && b.updatedBy==request.auth.uid && b.mutationId is string && b.mutationId.size()>=12 && b.mutationId.size()<=128
+        && id.matches('[A-Za-z0-9_-]{1,128}') && b.clientId.matches('[A-Za-z0-9_-]{1,128}') && b.packageId.matches('[A-Za-z0-9_-]{1,128}') && b.mutationId.matches('[A-Za-z0-9_-]{12,128}')
+        && shortText(b.location,200) && b.location.size()>0 && shortText(b.notes,2000) && shortText(b.writeReason,500)
+        && b.searchTokens is list && b.searchTokens.size()<=512 && b.searchTokens.hasAll([b.clientName.lower(),b.packageName.lower(),b.code.lower(),b.date]) && projections(s,id,b);
+    }
+    function validLock(s,date,d) {
+      let before=resource==null?{'entries':{},'order':[],'revision':0}:resource.data;
+      let id=d.changedBooking;
+      let b=getAfter(/databases/$(database)/documents/studios/$(s)/bookings/$(id)).data;
+      let present=date==b.date && b.sessionStatus!='cancelled';
+      return spark(s) && canBook(s) && d.keys().hasOnly(['entries','order','index','changedBooking','lastMutation','revision','updatedBy','updatedAt'])
+        && d.entries is map && d.order is list && d.order.size()<=96 && d.order.toSet().size()==d.order.size() && d.entries.keys().toSet()==d.order.toSet()
+        && d.entries.diff(before.entries).affectedKeys().hasOnly([id]) && d.order.removeAll([id])==before.order.removeAll([id])
+        && d.revision==before.revision+1 && d.updatedAt==request.time && d.updatedBy==request.auth.uid && d.lastMutation==b.mutationId && b.updatedAt==request.time && b.updatedBy==request.auth.uid && b.writeAction in ['create','reschedule','cancel']
+        && (present ? d.index is int && d.index>=0 && d.index<d.order.size() && d.order[d.index]==id
+          && d.entries[id]=={'startMs':b.startAt.toMillis(),'endMs':b.endAt.toMillis()}
+          && (d.index==0 || d.entries[d.order[d.index-1]].endMs<=d.entries[id].startMs)
+          && (d.index==d.order.size()-1 || d.entries[id].endMs<=d.entries[d.order[d.index+1]].startMs)
+        : !(id in d.entries) && date==get(/databases/$(database)/documents/studios/$(s)/bookings/$(id)).data.date);
+    }
+    function validMoneyDate(s,e) {
+      let studio=get(/databases/$(database)/documents/studios/$(s)).data;
+      let nowDay=timestamp.value(request.time.toMillis()-((request.time.toMillis()+25200000)%86400000));
+      return e.effectiveAt is timestamp && e.effectiveDate==wibDate(e.effectiveAt) && e.effectiveAt.toMillis()%86400000==61200000
+        && e.effectiveAt<=nowDay && (owner(s)?e.effectiveAt>=nowDay-duration.value(studio.get('maxFinanceBackdateDays',30),'d'):e.effectiveAt==nowDay);
+    }
+    function entryBooking(s,e) {
+      let before=get(/databases/$(database)/documents/studios/$(s)/bookings/$(e.bookingId)).data;
+      let after=getAfter(/databases/$(database)/documents/studios/$(s)/bookings/$(e.bookingId)).data;
+      let remaining=before.total-before.paidAmount+before.refundedAmount;
+      return e.expectedVersion==before.version && after.version==before.version+1 && after.updatedAt==request.time && after.lastEntryId==e.id
+        && e.bookingCode==before.code && e.clientName==before.clientName && e.bookingDate==before.date && e.bookingStartTime==before.startTime && e.bookingEndTime==before.endTime && e.sessionStatus==before.sessionStatus
+        && (income(e.kind)?before.sessionStatus in ['confirmed','done'] && remaining>0 && e.effectiveDate>=wibDate(before.createdAt)
+          && (e.kind=='income_dp'?e.amount<remaining:e.amount==remaining)
+        : owner(s) && before.sessionStatus=='cancelled' && refundSource(s,e));
+    }
+    function refundSource(s,e) {
+      let original=get(/databases/$(database)/documents/studios/$(s)/transactions/$(e.originalEntryId)).data;
+      let p=/databases/$(database)/documents/studios/$(s)/refundBalances/$(e.originalEntryId);
+      let before=exists(p)?get(p).data.amount:0;
+      let after=getAfter(p).data;
+      return income(original.kind) && original.bookingId==e.bookingId && e.effectiveDate>=original.effectiveDate && after.amount==before+e.amount && after.amount<=original.amount && after.lastEntryId==e.id && after.updatedAt==request.time;
+    }
+    function validEntry(s,id,d) {
+      let headPath=/databases/$(database)/documents/studios/$(s)/financeCounters/main;
+      let oldCount=exists(headPath)?get(headPath).data.count:0;
+      let head=getAfter(headPath).data;
+      let receipt=getAfter(/databases/$(database)/documents/studios/$(s)/financeMutations/$(request.auth.uid+'_'+d.mutationId)).data;
+      return spark(s) && (income(d.kind)?permitted(s,'payments'):owner(s))
+        && d.keys().hasOnly(['id','studioId','kind','amount','method','effectiveDate','effectiveAt','description','category','bookingId','bookingCode','clientName','originalEntryId','createdAt','createdBy','createdByName','mutationId','acknowledgedBy','sequence','expectedVersion','bookingDate','bookingStartTime','bookingEndTime','sessionStatus'])
+        && d.id==id && id.matches('[A-Za-z0-9_-]{1,128}') && d.mutationId.matches('[A-Za-z0-9_-]{12,128}') && d.studioId==s && d.kind in ['income_dp','income_settlement','expense','refund'] && d.amount is int && d.amount>0 && d.amount<=1000000000 && d.method in ['transfer','qris']
+        && shortText(d.description,500) && (income(d.kind)||d.description.size()>=3) && d.createdAt==request.time && d.createdBy==request.auth.uid && d.acknowledgedBy==request.auth.uid
+        && d.createdByName==get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && d.sequence==oldCount+1 && head.count==d.sequence && head.lastEntryId==id && head.updatedAt==request.time
+        && receipt.entryId==id && receipt.createdAt==request.time && receipt.uid==request.auth.uid && validMoneyDate(s,d)
+        && (d.kind=='expense'?d.category in ['operasional','sewa_alat','cetak','utilitas','konsumsi','lainnya'] && d.bookingId=='' && d.bookingCode=='' && d.clientName=='' && d.originalEntryId=='' && d.expectedVersion==null && d.bookingDate=='' && d.bookingStartTime=='' && d.bookingEndTime=='' && d.sessionStatus==''
+          : d.category=='' && (d.kind=='refund'||d.originalEntryId=='') && entryBooking(s,d));
+    }
+
+    function choiceData(c) { return {'name':c.name,'nameKey':c.nameKey,'phone':c.phone,'email':c.email,'version':c.version}; }
+    function choiceReady(s,id,c) { return !spark(s) || getAfter(/databases/$(database)/documents/studios/$(s)/clientChoices/$(id)).data==choiceData(c); }
+    function validChoice(s,id,d) { let c=getAfter(/databases/$(database)/documents/studios/$(s)/clients/$(id)).data; return c.updatedAt==request.time && d==choiceData(c); }
+    function validCounter(s,d) {
+      let p=/databases/$(database)/documents/studios/$(s)/bookingCounters/main;
+      let n=exists(p)?get(p).data.value:0;
+      let b=getAfter(/databases/$(database)/documents/studios/$(s)/bookings/$(d.lastBookingId)).data;
+      return d.keys().hasOnly(['value','lastBookingId','updatedAt']) && d.value is int && d.value==n+1 && d.value<=1000000000 && d.updatedAt==request.time
+        && b.writeAction=='create' && b.createdAt==request.time && b.createdBy==request.auth.uid && b.code==bookingCode(d.value);
+    }
+    function validBookingReceipt(s,id,r) {
+      let b=getAfter(/databases/$(database)/documents/studios/$(s)/bookings/$(r.bookingId)).data;
+      return r.keys().hasOnly(['fingerprint','result','uid','bookingId','mutationId','action','actorId','reason','version','date','startTime','endTime','sessionStatus','createdAt'])
+        && id==request.auth.uid+'_'+r.mutationId && r.uid==request.auth.uid && shortText(r.fingerprint,12000) && r.fingerprint.size()>0
+        && r.createdAt==request.time && r.actorId==request.auth.uid && b.updatedAt==request.time && b.updatedBy==request.auth.uid && b.mutationId==r.mutationId && r.action==b.writeAction
+        && r.reason==b.writeReason && r.version==b.version && r.date==b.date && r.startTime==b.startTime && r.endTime==b.endTime && r.sessionStatus==b.sessionStatus
+        && r.result=={'id':r.bookingId,'version':b.version,'code':b.code};
+    }
+    function validFinanceReceipt(s,id,r) {
+      let e=getAfter(/databases/$(database)/documents/studios/$(s)/transactions/$(r.entryId)).data;
+      return r.keys().hasOnly(['hash','result','uid','mutationId','entryId','createdAt']) && id==request.auth.uid+'_'+r.mutationId && r.uid==request.auth.uid && shortText(r.hash,12000) && r.hash.size()>0
+        && r.createdAt==request.time && e.createdAt==request.time && e.createdBy==request.auth.uid && e.mutationId==r.mutationId
+        && r.result.keys().hasOnly(['entryId','bookingId','bookingVersion']) && r.result.entryId==r.entryId && r.result.bookingId==e.bookingId && (e.kind=='expense'?r.result.bookingVersion==null:r.result.bookingVersion==e.expectedVersion+1);
+    }
+    function validFinanceCounter(s,d) {
+      let old=resource==null?0:resource.data.count;
+      let e=getAfter(/databases/$(database)/documents/studios/$(s)/transactions/$(d.lastEntryId)).data;
+      return d.keys().hasOnly(['count','lastEntryId','updatedAt']) && d.count is int && d.count==old+1 && d.updatedAt==request.time && e.sequence==d.count && e.createdAt==request.time && e.createdBy==request.auth.uid;
+    }
+    function validRefundCounter(s,id,d) {
+      let old=resource==null?{'amount':0,'version':0}:resource.data;
+      let e=getAfter(/databases/$(database)/documents/studios/$(s)/transactions/$(d.lastEntryId)).data;
+      let original=get(/databases/$(database)/documents/studios/$(s)/transactions/$(id)).data;
+      return d.keys().hasOnly(['amount','version','lastEntryId','updatedAt']) && d.amount is int && d.amount==old.amount+e.amount && d.amount<=original.amount && d.version==old.version+1
+        && d.updatedAt==request.time && e.createdAt==request.time && e.createdBy==request.auth.uid && e.originalEntryId==id && e.kind=='refund';
+    }
+
+    function validPermissions(p) { return p is map && p.keys().hasOnly(['booking','calendarCrm','payments','reports']) && p.booking is bool && p.calendarCrm is bool && p.payments is bool && p.reports is bool; }
+    function verifiedEmail(e) { return signedIn() && request.auth.token.get('email_verified',false)==true && request.auth.token.get('email','').lower()==e; }
+    function validPhone(p) { return p is string && (p==''||p.matches('[+]?[0-9 ()-]{8,24}')); }
+    function validProfileFields(p) { return shortText(p.displayName,100) && p.displayName.size()>=2 && validPhone(p.phone) && shortText(p.jobTitle,80) && p.version is int; }
+    function invitationPath(s,e) { return /databases/$(database)/documents/studios/$(s)/invitations/$(e); }
+    function claimSource(s,e) { let i=get(invitationPath(s,e)).data; return spark(s) && verifiedEmail(e) && i.status=='pending' && i.email==e && i.expiresAt>request.time; }
+    function profileClaim(uid,p) {
+      let i=get(invitationPath(p.studioId,p.invitationId)).data;
+      let m=getAfter(/databases/$(database)/documents/studios/$(p.studioId)/members/$(uid)).data;
+      let after=getAfter(invitationPath(p.studioId,p.invitationId)).data;
+      return signedIn() && uid==request.auth.uid && p.keys().hasOnly(['studioId','email','displayName','phone','jobTitle','invitationId','version','createdAt','updatedAt'])
+        && p.email==p.invitationId && claimSource(p.studioId,p.email) && validProfileFields(p) && p.version==1 && p.createdAt==request.time && p.updatedAt==request.time
+        && m.role=='staff' && m.status=='active' && m.permissions==i.permissions && m.email==p.email && m.displayName==p.displayName && after.status=='accepted' && after.acceptedBy==uid;
+    }
+    function profileEdit(uid,p) {
+      let before=resource.data;
+      let member=getAfter(/databases/$(database)/documents/studios/$(before.studioId)/members/$(uid)).data;
+      return signedIn() && uid==request.auth.uid && activeMember(before.studioId) && spark(before.studioId)
+        && p.diff(before).affectedKeys().hasOnly(['displayName','phone','jobTitle','version','updatedAt']) && validProfileFields(p) && p.version==before.get('version',0)+1 && p.updatedAt==request.time
+        && member.displayName==p.displayName && member.updatedAt==request.time;
+    }
+    function validStudioEdit(s,d) {
+      return spark(s) && owner(s) && d.diff(resource.data).affectedKeys().hasOnly(['name','address','phone','openingTime','closingTime','defaultDpPercent','settingsVersion','updatedBy','updatedAt'])
+        && shortText(d.name,100) && d.name.size()>=2 && shortText(d.address,500) && validPhone(d.phone)
+        && d.openingTime.matches('([01][0-9]|2[0-3]):(00|15|30|45)') && d.closingTime.matches('([01][0-9]|2[0-3]):(00|15|30|45)') && d.openingTime<d.closingTime
+        && d.defaultDpPercent is int && d.defaultDpPercent>=0 && d.defaultDpPercent<=100 && d.settingsVersion==resource.data.get('settingsVersion',0)+1 && d.updatedAt==request.time && d.updatedBy==request.auth.uid;
+    }
+    function memberClaim(s,uid,m) {
+      let p=getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      let i=get(invitationPath(s,m.invitationId)).data;
+      let after=getAfter(invitationPath(s,m.invitationId)).data;
+      return signedIn() && uid==request.auth.uid && claimSource(s,m.invitationId)
+        && m.keys().hasOnly(['role','status','permissions','email','displayName','invitationId','version','invitedBy','acceptedAt','createdAt','updatedAt','updatedBy'])
+        && m.role=='staff' && m.status=='active' && m.permissions==i.permissions && validPermissions(m.permissions) && m.email==i.email && m.displayName==p.displayName && p.studioId==s && p.email==m.email
+        && m.version==1 && m.invitedBy==i.createdBy && m.acceptedAt==request.time && m.createdAt==request.time && m.updatedAt==request.time && m.updatedBy==uid && after.status=='accepted' && after.acceptedBy==uid;
+    }
+    function memberEdit(s,uid,m) {
+      let old=resource.data;
+      let e=getAfter(/databases/$(database)/documents/studios/$(s)/staffEvents/$(uid+'_'+string(m.version))).data;
+      return owner(s) && spark(s) && old.role=='staff' && uid!=request.auth.uid && m.diff(old).affectedKeys().hasOnly(['permissions','status','version','updatedBy','updatedAt'])
+        && validPermissions(m.permissions) && m.status in ['active','inactive'] && m.version==old.get('version',0)+1 && m.updatedBy==request.auth.uid && m.updatedAt==request.time
+        && e.actor==request.auth.uid && e.target==uid && e.permissions==m.permissions && e.status==m.status && e.version==m.version && e.createdAt==request.time;
+    }
+    function memberName(s,uid,m) {
+      let p=getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      return signedIn() && uid==request.auth.uid && activeMember(s) && spark(s) && m.diff(resource.data).affectedKeys().hasOnly(['displayName','version','updatedAt','updatedBy'])
+        && m.displayName==p.displayName && p.studioId==s && p.updatedAt==request.time && m.version==resource.data.get('version',0)+1 && m.updatedAt==request.time && m.updatedBy==uid;
+    }
+    function inviteShape(e,d) {
+      return d.email==e && e.matches('[a-z0-9._+%-]+@[a-z0-9.-]+[.][a-z]{2,}') && shortText(d.displayName,100) && d.displayName.size()>=2 && validPermissions(d.permissions)
+        && d.expiresAt is timestamp && d.expiresAt>request.time && d.expiresAt<=request.time+duration.value(7,'d');
+    }
+    function invitationCreate(s,e,d) {
+      return owner(s) && spark(s) && d.keys().hasOnly(['email','displayName','permissions','status','version','mutationId','expiresAt','createdAt','createdBy','updatedAt','updatedBy'])
+        && inviteShape(e,d) && e!=request.auth.token.get('email','').lower() && d.status=='pending' && d.version==1 && d.mutationId is string && d.mutationId.size()>=12 && d.mutationId.size()<=128
+        && d.createdAt==request.time && d.createdBy==request.auth.uid && d.updatedAt==request.time && d.updatedBy==request.auth.uid;
+    }
+    function invitationEdit(s,e,d) {
+      return owner(s) && spark(s) && resource.data.status in ['pending','cancelled'] && d.diff(resource.data).affectedKeys().hasOnly(['displayName','permissions','status','version','expiresAt','updatedBy','updatedAt'])
+        && d.status in ['pending','cancelled'] && (d.status=='cancelled'||inviteShape(e,d)) && validPermissions(d.permissions)
+        && d.version==resource.data.version+1 && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
+    }
+    function invitationAccept(s,e,d) {
+      let p=getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let m=getAfter(/databases/$(database)/documents/studios/$(s)/members/$(request.auth.uid)).data;
+      return claimSource(s,e) && d.diff(resource.data).affectedKeys().hasOnly(['status','acceptedBy','acceptedAt','version','updatedAt','updatedBy'])
+        && d.status=='accepted' && d.acceptedBy==request.auth.uid && d.acceptedAt==request.time && d.version==resource.data.version+1 && d.updatedAt==request.time && d.updatedBy==request.auth.uid
+        && p.studioId==s && p.email==e && p.invitationId==e && m.role=='staff' && m.status=='active' && m.permissions==resource.data.permissions && m.invitationId==e && m.acceptedAt==request.time;
+    }
+    function validStaffEvent(s,id,e) {
+      let m=getAfter(/databases/$(database)/documents/studios/$(s)/members/$(e.target)).data;
+      return e.keys().hasOnly(['target','actor','permissions','status','version','createdAt']) && id==e.target+'_'+string(e.version) && e.actor==request.auth.uid && e.createdAt==request.time
+        && m.role=='staff' && m.updatedBy==request.auth.uid && m.updatedAt==request.time && m.version==e.version && m.permissions==e.permissions && m.status==e.status;
+    }
+    function validPreferences(d) {
+      let old=resource==null?{'payments':true,'version':0,'paymentsSince':timestamp.value(0)}:resource.data;
+      return d.keys().hasOnly(['schedule','payments','reminders','version','updatedAt','paymentsSince']) && d.schedule is bool && d.payments is bool && d.reminders is bool
+        && d.version==old.version+1 && d.updatedAt==request.time && d.paymentsSince==(d.payments!=old.payments?request.time:old.get('paymentsSince',timestamp.value(0)));
+    }
+
+    // Owners are provisioned by a trusted setup; clients may only claim staff
     // studio, grant itself a role, or activate a membership.
     match /users/{userId} {
       allow get: if signedIn() && request.auth.uid == userId;
-      allow list, create, update, delete: if false;
+      allow create: if profileClaim(userId,request.resource.data);
+      allow update: if profileEdit(userId,request.resource.data);
+      allow list, delete: if false;
     }
     match /studios/{studioId} {
       allow get: if activeMember(studioId);
-      allow list, create, update, delete: if false;
+      allow update: if validStudioEdit(studioId,request.resource.data);
+      allow list, create, delete: if false;
       match /members/{userId} {
         // Reading one's own inactive record permits clean access revocation.
-        allow get: if signedIn() && request.auth.uid == userId;
-        allow list, create, update, delete: if false;
+        allow get: if signedIn() && request.auth.uid == userId || owner(studioId);
+        allow list: if owner(studioId) && boundedList();
+        allow create: if memberClaim(studioId,userId,request.resource.data);
+        allow update: if memberEdit(studioId,userId,request.resource.data)||memberName(studioId,userId,request.resource.data);
       }
       match /clients/{clientId} {
         allow get: if permitted(studioId, 'calendarCrm');
         allow list: if permitted(studioId, 'calendarCrm') && boundedList();
-        allow create: if permitted(studioId, 'calendarCrm') && validClient(request.resource.data) && creating(request.resource.data);
-        allow update: if permitted(studioId, 'calendarCrm') && validClient(request.resource.data) && updating(request.resource.data);
+        allow create: if permitted(studioId, 'calendarCrm') && validClient(request.resource.data) && creating(request.resource.data) && choiceReady(studioId,clientId,request.resource.data);
+        allow update: if permitted(studioId, 'calendarCrm') && validClient(request.resource.data) && updating(request.resource.data) && choiceReady(studioId,clientId,request.resource.data);
         allow delete: if false;
       }
       match /packages/{packageId} {
@@ -84,11 +341,13 @@ service cloud.firestore {
       match /sessions/{bookingId} {
         allow get: if permitted(studioId, 'booking') || permitted(studioId, 'calendarCrm');
         allow list: if boundedList() && (permitted(studioId, 'booking') || permitted(studioId, 'calendarCrm'));
-        allow write: if false;
+        allow create, update: if spark(studioId) && (canBook(studioId)||permitted(studioId,'payments')) && request.resource.data==publicSession(getAfter(/databases/$(database)/documents/studios/$(studioId)/bookings/$(bookingId)).data,bookingId) && request.resource.data.updatedAt==request.time;
       }
       match /bookings/{bookingId} {
         allow get: if permitted(studioId, 'booking');
-        allow list, write: if false;
+        allow list: if false;
+        allow create: if bookBase(studioId,bookingId,request.resource.data) && bookCreate(studioId,bookingId,request.resource.data);
+        allow update: if bookBase(studioId,bookingId,request.resource.data) && request.resource.data.version==resource.data.version+1 && (bookEdit(studioId,bookingId,request.resource.data,resource.data)||bookMoney(studioId,bookingId,request.resource.data,resource.data));
         match /events/{eventId} {
           allow get: if permitted(studioId, 'booking');
           allow list: if permitted(studioId, 'booking') && boundedList();
@@ -98,14 +357,69 @@ service cloud.firestore {
       match /transactions/{entryId} {
         allow get: if permitted(studioId, 'payments') || permitted(studioId, 'reports');
         allow list: if boundedList() && (permitted(studioId, 'payments') || permitted(studioId, 'reports'));
-        allow write: if false;
+        allow create: if validEntry(studioId,entryId,request.resource.data);
       }
       match /financeMonths/{monthId} {
         allow get: if permitted(studioId, 'payments') || permitted(studioId, 'reports');
         allow list, write: if false;
       }
+      match /clientChoices/{id} {
+        allow get: if canBook(studioId)||permitted(studioId,'calendarCrm');
+        allow list: if boundedList() && (canBook(studioId)||permitted(studioId,'calendarCrm'));
+        allow create,update: if permitted(studioId,'calendarCrm') && validChoice(studioId,id,request.resource.data);
+      }
+      match /scheduleLocks/{date} {
+        allow get: if canBook(studioId)||permitted(studioId,'calendarCrm');
+        allow create,update: if validLock(studioId,date,request.resource.data);
+      }
+      match /bookingCounters/{id} {
+        allow get: if canBook(studioId);
+        allow create,update: if id=='main' && spark(studioId) && canBook(studioId) && validCounter(studioId,request.resource.data);
+      }
+      match /bookingMutations/{id} {
+        allow get: if canBook(studioId) && id.matches(request.auth.uid+'_.*');
+        allow list: if canBook(studioId) && boundedList();
+        allow create: if spark(studioId) && canBook(studioId) && validBookingReceipt(studioId,id,request.resource.data);
+      }
+      match /financeContexts/{id} {
+        allow get: if canMoney(studioId);
+        allow list: if canMoney(studioId) && boundedList();
+        allow create,update: if spark(studioId) && (canBook(studioId)||permitted(studioId,'payments')) && request.resource.data==publicMoney(getAfter(/databases/$(database)/documents/studios/$(studioId)/bookings/$(id)).data,id) && request.resource.data.updatedAt==request.time;
+      }
+      match /financeMutations/{id} {
+        allow get: if canMoney(studioId) && id.matches(request.auth.uid+'_.*');
+        allow list: if canMoney(studioId)&&boundedList();
+        allow create: if spark(studioId) && permitted(studioId,'payments') && validFinanceReceipt(studioId,id,request.resource.data);
+      }
+      match /financeCounters/{id} {
+        allow get: if canMoney(studioId);
+        allow create,update: if id=='main' && spark(studioId) && permitted(studioId,'payments') && validFinanceCounter(studioId,request.resource.data);
+      }
+      match /refundBalances/{id} {
+        allow get: if owner(studioId);
+        allow create,update: if spark(studioId) && owner(studioId) && validRefundCounter(studioId,id,request.resource.data);
+      }
+      match /invitations/{email} {
+        allow get: if owner(studioId)||verifiedEmail(email);
+        allow list: if owner(studioId)&&boundedList();
+        allow create: if invitationCreate(studioId,email,request.resource.data);
+        allow update: if invitationEdit(studioId,email,request.resource.data)||invitationAccept(studioId,email,request.resource.data);
+      }
+      match /staffEvents/{id} {
+        allow get: if owner(studioId);
+        allow list: if owner(studioId)&&boundedList();
+        allow create: if owner(studioId)&&spark(studioId)&&validStaffEvent(studioId,id,request.resource.data);
+      }
+      match /inboxPreferences/{uid} {
+        allow get: if signedIn()&&uid==request.auth.uid&&activeMember(studioId);
+        allow create,update: if signedIn()&&uid==request.auth.uid&&activeMember(studioId)&&spark(studioId)&&validPreferences(request.resource.data);
+      }
+      match /inboxReads/{uid}/items/{id} {
+        allow get: if signedIn()&&uid==request.auth.uid&&activeMember(studioId);
+        allow create: if signedIn()&&uid==request.auth.uid&&activeMember(studioId)&&spark(studioId)&&id.matches('[A-Za-z0-9_-]{1,220}')&&request.resource.data.keys().hasOnly(['readAt'])&&request.resource.data.readAt==request.time;
+      }
     }
-    // Slot locks, command receipts, counters and finance remain server-only.
+    // Collections without an explicit permission above remain inaccessible.
     match /{document=**} {
       allow read, write: if false;
     }

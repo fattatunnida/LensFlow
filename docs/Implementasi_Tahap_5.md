@@ -1,3 +1,5 @@
+> Catatan arsitektur historis: koneksi Functions pada tahap ini telah diganti Firestore langsung. Gunakan [panduan Firebase terkini](Hubungkan_Firebase.md) dan [catatan migrasi Spark](Migrasi_Firestore_Spark.md).
+
 # Implementasi Tahap 5 — Keuangan dan Ledger
 
 26 Oktober 2026. Lingkungan: Expo SDK 58, Firebase Auth/Firestore/Functions Emulator, project `demo-lensflow`. Backend, SDK dan bundle telah diverifikasi. Pengujian interaksi browser/perangkat fisik belum dapat dilakukan karena runtime kontrol browser masih gagal diinisialisasi. Tidak ada deploy cloud atau perpindahan uang sungguhan.
