@@ -9,12 +9,15 @@ import { SplashView } from '@/features/auth/SplashView';
 import { AuthShell } from '@/components/AuthShell';
 import { Button } from '@/components/Button';
 import { colors } from '@/theme/tokens';
+import { clearMasterDrafts } from '@/features/master-data/drafts';
+import { clearBookingHandoffs } from '@/features/bookings/drafts';
 
 void NativeSplashScreen.preventAutoHideAsync().catch(() => {});
 
 function Routes() {
   const { state, retry, logout } = useAuth();
   const [minimumSplashComplete, setMinimumSplashComplete] = useState(false);
+  useEffect(() => { if (state.status === 'signedOut') { clearMasterDrafts(); clearBookingHandoffs(); } }, [state.status]);
   // Hand over to the React splash immediately; a slow server must never leave
   // the unresponsive native splash covering the connection error/retry action.
   useEffect(() => { void NativeSplashScreen.hideAsync().catch(() => {}); }, []);

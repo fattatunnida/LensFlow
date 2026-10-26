@@ -8,6 +8,49 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/studios/$(studioId)/members/$(request.auth.uid)).data.status == 'active'
         && get(/databases/$(database)/documents/studios/$(studioId)/members/$(request.auth.uid)).data.role in ['owner', 'staff'];
     }
+    function membership(studioId) {
+      return get(/databases/$(database)/documents/studios/$(studioId)/members/$(request.auth.uid)).data;
+    }
+    function owner(studioId) { return activeMember(studioId) && membership(studioId).role == 'owner'; }
+    function permitted(studioId, permission) {
+      return activeMember(studioId) && (membership(studioId).role == 'owner' || membership(studioId).permissions[permission] == true);
+    }
+    function boundedList() { return request.query.limit > 0 && request.query.limit <= 100; }
+    function validName(d) {
+      return d.name is string && d.name.size() >= 2 && d.name.size() <= 100
+        && d.name == d.name.trim() && d.nameKey == d.name.lower();
+    }
+    function validMeta(d) {
+      return d.version is int && d.version >= 1 && d.version <= 1000000000
+        && d.mutationId is string && d.mutationId.size() >= 12 && d.mutationId.size() <= 128
+        && d.createdAt is timestamp && d.updatedAt is timestamp
+        && d.createdBy is string && d.updatedBy == request.auth.uid;
+    }
+    function creating(d) {
+      return validMeta(d) && d.version == 1 && d.createdAt == request.time && d.updatedAt == request.time && d.createdBy == request.auth.uid;
+    }
+    function updating(d) {
+      return validMeta(d) && d.version == resource.data.version + 1 && d.mutationId != resource.data.mutationId
+        && d.createdAt == resource.data.createdAt && d.createdBy == resource.data.createdBy && d.updatedAt == request.time;
+    }
+    function validClient(d) {
+      return d.keys().hasAll(['name', 'nameKey', 'phone', 'email', 'address', 'notes', 'leadSource', 'version', 'mutationId', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && d.keys().hasOnly(['name', 'nameKey', 'phone', 'email', 'address', 'notes', 'leadSource', 'version', 'mutationId', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && validName(d) && d.phone is string && d.phone.matches('[+][1-9][0-9]{7,14}')
+        && d.email is string && d.email.size() <= 254 && d.email == d.email.trim().lower()
+        && (d.email == '' || d.email.matches('[^\\s@]+@[^\\s@]+[.][^\\s@]+'))
+        && d.address is string && d.address.size() <= 500 && d.notes is string && d.notes.size() <= 2000
+        && d.leadSource in ['', 'instagram', 'whatsapp', 'referral', 'google', 'other'];
+    }
+    function validPackage(d) {
+      return d.keys().hasAll(['name', 'nameKey', 'price', 'durationMinutes', 'editedPhotosCount', 'defaultLocation', 'description', 'isActive', 'version', 'mutationId', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && d.keys().hasOnly(['name', 'nameKey', 'price', 'durationMinutes', 'editedPhotosCount', 'defaultLocation', 'description', 'isActive', 'version', 'mutationId', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && validName(d) && d.price is int && d.price > 0 && d.price <= 1000000000
+        && d.durationMinutes is int && d.durationMinutes >= 15 && d.durationMinutes <= 1440
+        && d.editedPhotosCount is int && d.editedPhotosCount >= 0 && d.editedPhotosCount <= 1000
+        && d.defaultLocation is string && d.defaultLocation.trim().size() > 0 && d.defaultLocation.size() <= 200
+        && d.description is string && d.description.size() <= 1000 && d.isActive is bool;
+    }
 
     // Provisioned by trusted Admin scripts. A client cannot choose its own
     // studio, grant itself a role, or activate a membership.
@@ -23,8 +66,46 @@ service cloud.firestore {
         allow get: if signedIn() && request.auth.uid == userId;
         allow list, create, update, delete: if false;
       }
+      match /clients/{clientId} {
+        allow get: if permitted(studioId, 'calendarCrm');
+        allow list: if permitted(studioId, 'calendarCrm') && boundedList();
+        allow create: if permitted(studioId, 'calendarCrm') && validClient(request.resource.data) && creating(request.resource.data);
+        allow update: if permitted(studioId, 'calendarCrm') && validClient(request.resource.data) && updating(request.resource.data);
+        allow delete: if false;
+      }
+      match /packages/{packageId} {
+        allow get: if owner(studioId) || (permitted(studioId, 'booking') && resource.data.isActive == true);
+        allow list: if boundedList() && (owner(studioId) || (permitted(studioId, 'booking') && resource.data.isActive == true));
+        allow create: if owner(studioId) && validPackage(request.resource.data) && creating(request.resource.data);
+        allow update: if owner(studioId) && validPackage(request.resource.data) && updating(request.resource.data);
+        allow delete: if false;
+      }
+      // Schedule projections omit contact details, notes and financial amounts.
+      match /sessions/{bookingId} {
+        allow get: if permitted(studioId, 'booking') || permitted(studioId, 'calendarCrm');
+        allow list: if boundedList() && (permitted(studioId, 'booking') || permitted(studioId, 'calendarCrm'));
+        allow write: if false;
+      }
+      match /bookings/{bookingId} {
+        allow get: if permitted(studioId, 'booking');
+        allow list, write: if false;
+        match /events/{eventId} {
+          allow get: if permitted(studioId, 'booking');
+          allow list: if permitted(studioId, 'booking') && boundedList();
+          allow write: if false;
+        }
+      }
+      match /transactions/{entryId} {
+        allow get: if permitted(studioId, 'payments') || permitted(studioId, 'reports');
+        allow list: if boundedList() && (permitted(studioId, 'payments') || permitted(studioId, 'reports'));
+        allow write: if false;
+      }
+      match /financeMonths/{monthId} {
+        allow get: if permitted(studioId, 'payments') || permitted(studioId, 'reports');
+        allow list, write: if false;
+      }
     }
-    // Future booking and finance collections stay closed until implemented.
+    // Slot locks, command receipts, counters and finance remain server-only.
     match /{document=**} {
       allow read, write: if false;
     }

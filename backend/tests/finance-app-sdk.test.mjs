@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import { before,after,test } from 'node:test';
+import { createRequire } from 'node:module';
+import { initializeApp,deleteApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getFirebaseClient } from '../../src/lib/firebase/client.ts';
+import { saveMaster } from '../../src/features/master-data/repository.ts';
+import { validateClient,validatePackage } from '../../src/features/master-data/validation.ts';
+import { sendBooking,sessionPage } from '../../src/features/bookings/repository.ts';
+import { dateWib,shiftDate } from '../../src/features/bookings/models.ts';
+import { financeBooking,financeBookings,financeSummary,ledgerPage,readEntry,refundSources,sendFinance } from '../../src/features/finance/repository.ts';
+const require=createRequire(import.meta.url),{signInWithEmailAndPassword}=require('firebase/auth'),{getApp,deleteApp:deleteSdk}=require('firebase/app');
+for(const host of [process.env.FIREBASE_AUTH_EMULATOR_HOST,process.env.FIRESTORE_EMULATOR_HOST])if(!host||!/^(127\.0\.0\.1|localhost):\d+$/.test(host))throw new Error('SDK tests require loopback emulators.');
+globalThis.__DEV__=true;Object.assign(process.env,{EXPO_PUBLIC_FIREBASE_USE_EMULATORS:'true',EXPO_PUBLIC_FIREBASE_EMULATOR_HOST:'127.0.0.1',EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT:'9099',EXPO_PUBLIC_FIREBASE_FIRESTORE_EMULATOR_PORT:'8082',EXPO_PUBLIC_FIREBASE_FUNCTIONS_EMULATOR_PORT:'5001'});
+const admin=initializeApp({projectId:'demo-lensflow'},'finance-sdk-test'),db=getFirestore(admin),auth=getAuth(admin),studioId='finance-sdk-test',uid='f5-app-sdk';
+before(async()=>{
+  await db.recursiveDelete(db.doc(`studios/${studioId}`));try{await auth.getUser(uid);}catch(error){if(error.code!=='auth/user-not-found')throw error;await auth.createUser({uid,email:'f5-app-sdk@lensflow.test',password:'FinanceTests2026!'});}
+  await db.doc(`users/${uid}`).set({studioId,displayName:'SDK Owner',email:'f5-app-sdk@lensflow.test'});await db.doc(`studios/${studioId}`).set({name:'Finance SDK',timezone:'Asia/Jakarta'});await db.doc(`studios/${studioId}/members/${uid}`).set({role:'owner',status:'active',permissions:{booking:true,calendarCrm:true,payments:true,reports:true}});
+  const client=getFirebaseClient();await signInWithEmailAndPassword(client.auth,'f5-app-sdk@lensflow.test','FinanceTests2026!');const actor={uid,studioId,role:'owner',crm:true,booking:true,payments:true,reports:true};
+  await saveMaster(client.db,actor,'clients','customer',null,validateClient({name:'SDK Customer',phone:'081234567890',email:'',address:'',notes:'',leadSource:''}).value,'finance-client-0001');await saveMaster(client.db,actor,'packages','package',null,validatePackage({name:'SDK Portrait',price:'500000',durationMinutes:'60',editedPhotosCount:'10',defaultLocation:'Studio',description:'',isActive:true}).value,'finance-package-0001');
+});
+after(async()=>{await deleteSdk(getApp());await deleteApp(admin);});
+test('application SDK posts DP, settlement, cancellation, refund and expense with exact monthly reconciliation and paged reads',async()=>{
+  const today=dateWib(),month=today.slice(0,7);await sendBooking(studioId,'booking','booking-create-0001',{action:'create',expectedVersion:null,clientId:'customer',packageId:'package',clientVersion:1,packageVersion:1,dpPercent:30,date:shiftDate(today,2),startTime:'09:00',endTime:'10:00',location:'Studio',notes:''});
+  assert.equal((await financeBookings(studioId,'sdk')).items[0].id,'booking');let b=await financeBooking(studioId,'booking');assert.equal(b.collectible,500000);
+  const dp={kind:'income_dp',bookingId:'booking',expectedVersion:1,amount:200000,method:'transfer',effectiveDate:today,description:'DP verified',acknowledged:true};const result=await sendFinance(studioId,'dp','finance-dp-000001',dp);assert.deepEqual(await sendFinance(studioId,'dp','finance-dp-000001',dp),result);assert.equal(typeof(await readEntry(studioId,'dp')).createdAt,'number');
+  b=await financeBooking(studioId,'booking');assert.equal(b.collectible,300000);assert.equal(b.paymentStatus,'dp_paid');assert.equal((await sessionPage(studioId,{filter:'dp_paid'})).items[0].version,2);
+  await sendFinance(studioId,'settlement','finance-settle-0001',{...dp,kind:'income_settlement',expectedVersion:2,amount:300000,method:'qris'});assert.equal((await financeBooking(studioId,'booking')).paymentStatus,'paid');
+  await sendBooking(studioId,'booking','booking-cancel-0001',{action:'cancel',expectedVersion:3,reason:'Customer cancellation'});const sources=await refundSources(studioId,'booking');assert.equal(sources.items.length,2);assert.equal(sources.items.find(s=>s.id==='dp').remaining,200000);
+  await sendFinance(studioId,'refund-dp','finance-refund-001',{kind:'refund',bookingId:'booking',expectedVersion:4,originalEntryId:'dp',amount:200000,method:'qris',effectiveDate:today,description:'DP returned',acknowledged:true});
+  await sendFinance(studioId,'refund-rest','finance-refund-002',{kind:'refund',bookingId:'booking',expectedVersion:5,originalEntryId:'settlement',amount:300000,method:'qris',effectiveDate:today,description:'Settlement returned',acknowledged:true});
+  const expense={kind:'expense',category:'operasional',amount:100000,method:'qris',effectiveDate:today,description:'Studio supplies',acknowledged:true};await sendFinance(studioId,'expense','finance-expense-001',expense);
+  for(let i=0;i<27;i++)await sendFinance(studioId,`page-${i}`,`finance-page-${String(i).padStart(4,'0')}`,{...expense,amount:100,description:`Paged expense ${i}`});
+  const first=await ledgerPage(studioId,{month,group:'expense',method:'qris'}),next=await ledgerPage(studioId,{month,group:'expense',method:'qris'},first.cursor);assert.equal(first.items.length,25);assert.equal(first.hasMore,true);assert.equal(next.items.length,3);assert.equal(next.hasMore,false);assert.equal(new Set([...first.items,...next.items].map(e=>e.id)).size,28);
+  assert.equal((await ledgerPage(studioId,{bookingId:'booking'})).items.length,4);assert.equal((await ledgerPage(studioId,{month,group:'income'})).items.length,2);
+  const summary=await financeSummary(studioId,month,'all');assert.deepEqual({income:summary.income,refund:summary.refund,expense:summary.expense,count:summary.count},{income:500000,refund:500000,expense:102700,count:32});
+  const transfer=await financeSummary(studioId,month,'transfer'),qris=await financeSummary(studioId,month,'qris');assert.equal(transfer.income+qris.income,summary.income);assert.equal(qris.refund,500000);assert.equal((await financeSummary(studioId,'2020-01','all')).count,0);
+  b=await financeBooking(studioId,'booking');assert.equal(b.collectible,0);assert.equal(b.netPaid,0);assert.equal(b.refundStatus,'full');assert.equal(b.receivedAmount,500000);assert.equal((await refundSources(studioId,'booking')).items.every(s=>s.remaining===0),true);
+});

@@ -1,4 +1,5 @@
 import Feather from '@expo/vector-icons/Feather';
+import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Brand } from '@/components/Brand';
@@ -18,6 +19,7 @@ interface MenuItemProps {
   onPress: () => void;
   danger?: boolean;
   permission?: keyof Permissions;
+  anyPermissions?: (keyof Permissions)[];
 }
 
 function MenuItem({ icon, label, sublabel, onPress, danger }: MenuItemProps) {
@@ -77,14 +79,14 @@ export default function MoreScreen() {
           label: 'Paket Foto',
           sublabel: 'Katalog layanan studio',
           permission: 'booking',
-          onPress: () => setFeature({ title: 'Paket foto', message: 'Katalog paket foto dan pengelolaan layanan studio segera tersedia.' }),
+          onPress: () => router.push('/packages'),
         },
         {
           icon: 'credit-card',
           label: 'Keuangan',
           sublabel: 'Pemasukan & pengeluaran',
-          permission: 'payments',
-          onPress: () => setFeature({ title: 'Keuangan', message: 'Pencatatan pembayaran, pengeluaran dan refund studio segera tersedia.' }),
+          anyPermissions: ['payments','reports'],
+          onPress: () => router.push('/finance'),
         },
         {
           icon: 'bar-chart-2',
@@ -174,7 +176,7 @@ export default function MoreScreen() {
         </View>
 
         {/* Menu Sections */}
-        {menuSections.map((section) => ({ ...section, items: section.items.filter((item) => isOwner || !item.permission || session.permissions[item.permission]) }))
+        {menuSections.map((section) => ({ ...section, items: section.items.filter((item) => isOwner || (!item.permission&&!item.anyPermissions) || (item.permission&&session.permissions[item.permission]) || item.anyPermissions?.some(permission=>session.permissions[permission])) }))
           .filter((section) => section.items.length > 0).map((section, sIdx) => (
           <View key={sIdx} style={styles.section}>
             {Boolean(section.title) && (

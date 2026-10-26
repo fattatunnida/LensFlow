@@ -2,18 +2,20 @@
 
 Dokumen ini memetakan seluruh isi desain Figma (~50 layar & state) dan kebutuhan spesifikasi proyek (`LensFlow_Dokumen_Proyek.md`) ke dalam rencana kerja bertahap yang konsisten, aman, dan dapat diverifikasi secara visual maupun fungsional.
 
-## Status implementasi — 25 Oktober 2026
+## Status implementasi — 26 Oktober 2026
 
 - Tahap 1: autentikasi dan akses studio tetap dipakai.
 - Tahap 2: token, skala tipografi, UI kit, format Rupiah/tanggal/waktu, serta lima tab sudah terpasang. Route `/home` kini unik di `(app)/(tabs)/home.tsx`; detail fitur berikutnya dapat diletakkan di Stack `(app)` di luar `(tabs)`.
-- Beranda dan Booking menampilkan fixture lokal yang selalu diberi penanda **Pratinjau**. Pencarian, filter status, reset pencarian dan dialog informasi bisa diuji. Angka tersebut bukan data keuangan studio.
-- Kalender dan Pelanggan masih kerangka UI. Menu fitur mendatang menampilkan informasi ketersediaan, tanpa submit atau sukses semu. Profil akun dan konfirmasi logout berfungsi. Tampilan staf mengikuti izin sesi.
-- Tanggal/waktu memakai zona `Asia/Jakarta` secara default dan dapat menerima zona studio lain. Nomor internasional eksplisit tidak diubah menjadi nomor Indonesia.
+- Beranda masih fixture lokal berlabel **Pratinjau** sampai Tahap 6. Booking dan Kalender sekarang membaca data studio dari Firestore.
+- Tahap 3: pelanggan dan katalog paket membaca/menulis Firestore, lengkap dengan tambah/edit/detail, pencarian awalan, pagination 25 data, normalisasi telepon, peringatan duplikat, status paket, dan pemeriksaan versi. Lihat `Implementasi_Tahap_3.md` serta `../design-qa.md` untuk batas fitur dan hasil uji.
+- Tahap 4 telah diimplementasikan: form booking tiga langkah, snapshot, command Functions, pencegahan bentrok atomik, daftar/detail, edit lokasi/catatan, ubah jadwal, pembatalan, selesai sesi, kalender hari/minggu, serta riwayat pelanggan. 23 test aplikasi + 35 integrasi lulus. UI baru belum diuji langsung karena alat browser gagal diinisialisasi; penerimaan visual tetap terbuka. Lihat `Implementasi_Tahap_4.md`.
+- Formatter dapat menerima zona lain, tetapi command booking Tahap 4 hanya menerima studio Asia/Jakarta/WIB. Jam default 08.00–21.00, interval 15 menit, tanpa sesi lintas tengah malam. Nomor internasional eksplisit tidak diubah menjadi nomor Indonesia.
 - Tipe route dihasilkan oleh Expo CLI saat dev server berjalan; file `.expo/types/router.d.ts` tidak diedit manual dan tidak menggunakan cast `any` untuk navigasi.
-- Emulator Firestore lokal memakai `8082` karena `8080` dipakai layanan lain; Auth tetap `9099`, Emulator UI `4000`.
-- Tahap 3–9 belum dinyatakan selesai. Integrasi data booking/CRM, validasi bentrok, ledger, laporan dan pengaturan tetap mengikuti tahapan di bawah.
+- Emulator Firestore memakai `8082`, Auth `9099`, Functions `5001`, dan UI `4000`. Jalankan `npm run backend:install` setelah `npm ci` pada checkout baru.
+- Tahap 5 telah diimplementasikan: DP/pelunasan, ledger append-only, pengeluaran/refund owner, saldo, konteks staf pembayaran, filter periode/metode dan ringkasan kas. 28 test aplikasi + 52 integrasi lulus; QA interaksi UI Tahap 4–5 tetap terbuka karena alat browser gagal. Lihat `Implementasi_Tahap_5.md`.
+- Tahap 6–9 belum diimplementasikan. Dashboard/notifikasi, laporan analitis dan pengaturan mengikuti urutan di bawah. Penghapusan pelanggan/paket tetap tidak dibuka.
 
-Referensi visual saat ini adalah gambar `Slice 1 (1).png` yang diberikan pengguna. Pemeriksaan berfokus pada shell Tahap 2; belum merupakan klaim implementasi 1:1 seluruh layar pada board Figma.
+Referensi visual saat ini adalah gambar `Slice 1 (1).png` yang diberikan pengguna. Pemeriksaan mencakup shell Tahap 2 dan alur master data Tahap 3; belum merupakan klaim implementasi 1:1 seluruh layar pada board Figma.
 
 ---
 
@@ -115,18 +117,18 @@ Untuk menjaga kualitas kode, kepatuhan arsitektur Expo/React Native, kebersihan 
 > **Tujuan**: Membangun entitas fondasi (Pelanggan & Paket) yang menjadi prasyarat pembuatan booking, lengkap dengan validasi dan schema Firestore.
 
 - **3.1 Backend & Firestore Rules**:
-  - Collection `studios/{studioId}/clients` (nama, phone normalized, email, notes, totalBookings).
+  - Collection `studios/{studioId}/clients` (name, nameKey, phone normalized, email, address, notes, leadSource). Jumlah sesi berasal dari modul booking berikutnya, belum disimpan sebagai angka contoh.
   - Collection `studios/{studioId}/packages` (name, price, durationMinutes, editedPhotosCount, isActive, defaultLocation).
-  - Security rules Firestore untuk owner & staf dengan izin CRM/Master data.
-- **3.2 Modul CRM Pelanggan (`src/features/clients/` & `src/app/(app)/clients/`)**:
-  - `index.tsx`: Daftar pelanggan dengan baris avatar, nama, nomor telepon, dan badge booking count. Fitur search real-time.
-  - `[id].tsx`: Detail pelanggan, tab riwayat booking, tombol aksi cepat Telepon & WhatsApp via deep linking (`Linking.openURL`).
+  - Rules: owner/CRM mengelola pelanggan; owner mengelola paket; staf booking membaca paket aktif. Query dibatasi, metadata server dan versi wajib, delete ditolak.
+- **3.2 Modul CRM Pelanggan (`src/features/master-data/` & `src/app/(app)/clients/`)**:
+  - Daftar di `(tabs)/clients.tsx`: avatar inisial, nama, nomor telepon, pencarian awalan yang dibaca dari server, debounce 250 ms, serta pagination 25 data.
+  - `[id]/index.tsx`: detail pelanggan, tombol Telepon/WhatsApp via `Linking.openURL`. Riwayat dan hitungan booking menunggu Tahap 4.
   - `new.tsx` / `edit.tsx`: Form input dengan normalisasi nomor WhatsApp Indonesia (`08...` -> `+62...`) dan deteksi duplikat.
   - State kosong (*Empty state*) & error retry.
-- **3.3 Modul Paket Foto (`src/features/packages/` & `src/app/(app)/packages/`)**:
+- **3.3 Modul Paket Foto (`src/features/master-data/` & `src/app/(app)/packages/`)**:
   - Listing paket foto dengan kartu informasi (harga, durasi, jumlah foto editan, status aktif).
   - Form tambah/edit paket foto (hanya dapat diakses owner studio).
-- **Hasil Uji**: CRUD pelanggan dan paket foto berjalan lancar, input divalidasi, layout konsisten dengan Figma.
+- **Hasil Uji**: tambah/baca/edit pelanggan dan paket, status aktif, validasi, duplikat nomor, konflik versi, idempotensi, pagination, isolasi studio, dan izin terverifikasi. 19 test aplikasi + 22 test backend lulus; ekspor Android/iOS/web berhasil. Delete dan riwayat booking tidak termasuk hasil tahap ini. QA visual perangkat fisik serta pencocokan 1:1 tetap Tahap 9.
 
 ---
 
@@ -142,16 +144,18 @@ Untuk menjaga kualitas kode, kepatuhan arsitektur Expo/React Native, kebersihan 
     2. *Pilih Paket Foto*: Pemilihan paket aktif otomatis mengisi estimasi durasi dan perhitungan target DP (30%).
     3. *Jadwal & Rincian*: Pemilih tanggal, jam mulai & jam selesai, lokasi sesi, catatan khusus, dan kalkulasi total biaya.
   - Validasi bentrok jadwal real-time dengan modal peringatan `S31`.
-- **4.3 Daftar Booking (`src/app/(app)/bookings/index.tsx`)**:
+- **4.3 Daftar Booking (`src/app/(app)/(tabs)/bookings.tsx`)**:
   - Filter tab status: *Semua*, *Menunggu DP*, *DP Lunas*, *Lunas*, *Selesai*, *Batal*.
   - Kartu booking dengan tanggal, nama klien, paket, jam sesi, status badge, dan nominal saldo.
-- **4.4 Detail Booking (`src/app/(app)/bookings/[id].tsx`)**:
+- **4.4 Detail Booking (`src/app/(app)/bookings/[id]/index.tsx`)**:
   - Informasi lengkap: Banner status, kartu kontak klien, rincian paket, ringkasan pembayaran (total, terbayar, sisa).
   - Aksi operasional: *Ubah Jadwal (Reschedule)*, *Tandai Selesai*, *Batalkan Booking* (dengan modal konfirmasi).
-- **4.5 Tampilan Kalender (`src/app/(app)/calendar/index.tsx`)**:
+- **4.5 Tampilan Kalender (`src/app/(app)/(tabs)/calendar.tsx`)**:
   - Toggle view: Tampilan Minggu (*Week*) dan Tampilan Hari (*Day* timeline).
   - Visualisasi slot waktu studio dan penanda sesi foto.
 - **Hasil Uji**: Booking tersimpan dengan snapshot akurat, deteksi bentrok terverifikasi, kalender membaca data yang sama dengan list booking.
+
+Status 26 Oktober 2026: kontrak data dan backend/SDK sudah lulus pengujian, ekspor tiga platform berhasil. Kalender memakai agenda berurutan per jam/hari dengan pilihan Hari/Minggu. Penerimaan interaksi UI, layar kecil dan visual 1:1 masih perlu pengujian langsung. Filter menampilkan Menunggu DP, DP Dibayar, Lunas, Selesai dan Batal; sesi confirmed terpisah dari paymentStatus. Tidak ada pencatatan uang pada Tahap 4.
 
 ---
 
@@ -159,17 +163,19 @@ Untuk menjaga kualitas kode, kepatuhan arsitektur Expo/React Native, kebersihan 
 > **Tujuan**: Memastikan pencatatan kas studio akurat, immutable (append-only ledger), dan mendukung alur pembayaran studio foto (DP -> Pelunasan -> Refund).
 
 - **5.1 Arsitektur Finansial & Firestore Rules**:
-  - Collection `studios/{studioId}/transactions` (type: `dp`, `full_payment`, `refund`, `expense`).
+  - Collection `studios/{studioId}/transactions` (kind: `income_dp`, `income_settlement`, `refund`, `expense`).
   - Aturan bisnis: Nilai tidak boleh negatif/melebihi sisa tagihan, transaksi uang bersifat *append-only*.
 - **5.2 Penerimaan Pembayaran (`Terima Pembayaran`)**:
-  - Bottom sheet / modal dari Detail Booking untuk mencatat DP atau Pelunasan.
-  - Pilihan metode: *Transfer*, *Tunai*, *QRIS*.
+  - Form Stack dari Detail Booking atau menu Keuangan, dengan konfirmasi setelah uang diverifikasi.
+  - Pilihan metode baseline PRD: *Transfer*, *QRIS*. Tunai belum dibuka.
   - Update otomatis sisa tagihan dan status badge booking (`pending_dp` -> `dp_paid` -> `paid`).
 - **5.3 Catat Pengeluaran Studio**:
   - Form pencatatan pengeluaran operasional (sewa alat, cetak foto, utilitas, konsumsi).
 - **5.4 Pembatalan & Refund**:
   - Alur refund terkontrol oleh owner yang merujuk pada transaksi penerimaan asal.
 - **Hasil Uji**: Idempotensi transaksi, saldo booking terhitung tepat, tidak ada uang tercatat ganda.
+
+Status 26 Oktober 2026: command dan repository SDK lulus uji, termasuk race pembayaran/refund, refund per pembayaran asal, versi booking, isolasi studio, immutable ledger, tanggal efektif WIB, dan rekonsiliasi cache kas. Ringkasan kas bulan/metode diperbarui atomik, refund dipisahkan dari pengeluaran. UI telah terpasang tetapi belum diuji klik/screenshot/perangkat fisik. Backdate owner default maksimal 30 hari (konfigurasi Admin `maxFinanceBackdateDays`), staf hanya hari ini; koreksi/reversal posted belum dibuka.
 
 ---
 

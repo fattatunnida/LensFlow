@@ -47,6 +47,7 @@ export async function provisionOwner({ projectId, email, password, displayName, 
         name: studioName,
         ownerUid: user.uid,
         timezone: 'Asia/Jakarta',
+        openingTime: '08:00', closingTime: '21:00', defaultDpPercent: 30,
         createdAt: FieldValue.serverTimestamp(),
       });
     }

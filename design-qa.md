@@ -1,71 +1,62 @@
-# QA Tahap 2 — design system dan navigasi utama
+# QA Tahap 5 — Keuangan
 
-Tanggal: 25 Oktober 2026. QA autentikasi sebelumnya dipertahankan di `docs/qa/Login_Splash_QA.md`.
+26 Oktober 2026. Catatan Tahap 4 dipertahankan di `docs/qa/Tahap_4_QA.md`; QA sebelumnya tetap tersedia. Lingkungan terverifikasi adalah emulator project demo-lensflow dan SDK aplikasi, bukan Firebase cloud atau perangkat fisik.
 
-## Lingkup dan sumber visual
+## Status
 
-Sumber: `C:/Users/Public/Downloads/Slice 1 (1).png`, 5397 × 12184 px. Instruksi pekerjaan berasal dari teks terlampir yang meminta melanjutkan Tahap 2 yang terhenti. Penilaian ini mencakup kerangka lima tab, fondasi UI, serta komposisi Beranda dan pratinjau Booking. Ini bukan penerimaan seluruh layar atau integrasi bisnis pada board.
+Implementasi: Keuangan dari Lainnya, daftar dan detail transaksi, filter bulan/metode/jenis, konteks booking minimum, DP/pelunasan, pengeluaran owner, refund owner yang merujuk pembayaran asal, ringkasan kas dan pembaruan status/saldo booking. Login/splash tetap memakai implementasi sebelumnya. Beranda masih pratinjau sampai Tahap 6.
 
-- Crop Beranda: x=3330, y=582, 390 × 900 px, `test-results/stage2-home-reference.png`.
-- Crop Booking: x=3753, y=582, 390 × 900 px, `test-results/stage2-bookings-reference.png`.
-- Browser-rendered implementation: `test-results/stage2-home.png`, `test-results/stage2-bookings.png`, `test-results/stage2-more.png`.
-- Full-view comparisons: `test-results/stage2-home-comparison.png`, `test-results/stage2-bookings-comparison.png`; sumber di kiri dan implementasi di kanan.
-- Focused comparison: `test-results/stage2-tabs-comparison.png` dan `test-results/stage2-header-comparison.png`.
-- Compact evidence: `test-results/stage2-home-compact.png`, `test-results/stage2-bookings-compact.png`.
+Lint dan TypeScript lulus. **28 test aplikasi + 52 test integrasi = 80 lulus**. Ekspor bundle Android/iOS/web lulus. Tidak dinyatakan lulus pengujian klik/layout/screenshot atau perangkat fisik.
 
-## Viewport, normalisasi dan state
+## Bukti layanan dan SDK
 
-Viewport utama 390 × 900 CSS px; screenshot 390 × 900 px; browser melaporkan DPR sekitar 1. Tidak ada pembesaran screenshot implementasi untuk perbandingan. Referensi di-crop dari board pada resolusi aslinya. Status bar, bingkai bulat perangkat dan home indicator pada referensi dikecualikan dari penilaian konten aplikasi; web preview tidak menggambarnya ulang. Perbandingan detail memeriksa header dan navigasi secara terpisah agar perbedaan device chrome tidak dinilai sebagai bug.
+| Kasus | Hasil |
+|---|---|
+| Multiple DP lalu Pelunasan | Nominal tersimpan sekali; saldo dan paymentStatus tepat |
+| Pelunasan sebagai pembayaran pertama | Seluruh harga diterima tepat, tanpa DP nol |
+| DP sama/melebihi sisa, settlement kurang, nol/negatif/pecahan/overflow | Ditolak tanpa perubahan saldo |
+| Retry receipt sama | Hasil awal dikembalikan; audit/entry tidak bertambah |
+| Mutation dipakai dengan payload berbeda | Ditolak |
+| Entry ID sama dengan mutation baru | Ditolak; dapat diperiksa melalui detail entry |
+| Dua pelunasan bersamaan | Hanya satu diterima; tidak ada overpayment |
+| Bayar dan batal bersamaan | Hanya satu perubahan versi diterima |
+| Refund sebelum batal atau lintas pembayaran/booking | Ditolak |
+| Refund parsial dan penuh tiap asal | Batas asal terjaga; original ledger tidak diubah |
+| Dua refund bersamaan | Tidak melampaui saldo refundable |
+| Pembatalan saja | Tidak mencatat refund otomatis |
+| Booking done belum lunas | Tetap dapat menerima pembayaran |
+| Owner expense | Tidak mengubah saldo booking; retry tidak menggandakan pengeluaran |
+| Staf pembayaran/laporan/booking/CRM | Batas baca/tulis ditegakkan server, bukan hanya UI |
+| Revoke, membership nonaktif, anonim, studio lain, boolean salah tipe | Ditolak; replay juga memerlukan izin aktif |
+| Write/update/delete langsung ke ledger/cache/counter | Ditolak, termasuk bagi owner |
+| Tanggal palsu/masa depan, backdate staf, sebelum transaksi asal | Ditolak |
+| Cache saldo tidak sesuai ledger | Posting ditolak dan meminta rekonsiliasi |
+| Pagination | Ledger 25+3, picker booking 25+2, pembayaran asal 25+2 terbaca tanpa duplikasi/hilang |
+| Audit akhir | Setiap entry posted cocok dengan booking, projection, akun saldo, counter refund dan cache kas bulan/metode |
+| SDK aplikasi | Booking → DP → lunas → batal → refund → expense → detail/filter/ringkasan lulus |
+| Regresi Tahap 4 | Bentrok create/reschedule, adjacent slots, versi, snapshots, kalender dan akses tetap lulus |
 
-State: owner demo terautentikasi; data Beranda dan Booking adalah fixture lokal yang diberi label Pratinjau. Tanggal menampilkan hari berjalan dalam zona Jakarta. Kalender dan Pelanggan tetap kerangka fitur mendatang. Uji tambahan pada 320 × 700 CSS px menunjukkan lebar dokumen 320 px tanpa overflow horizontal; konten dapat di-scroll sementara tab bar tetap tersedia.
+Artefak: `test-results/stage5-unit-tests.log`, `stage5-backend-tests.log`, `stage5-app-sdk.log`, `stage5-verified-export.log`, dan `stage5-verified-export/metadata.json`. Error PERMISSION_DENIED dalam log integrasi merupakan kasus negatif yang disengaja. Fixture hanya pada namespace pengujian; tidak mengisi kas Studio Cahaya.
 
-## Evaluasi lima permukaan visual
+## Pemeriksaan UI yang belum dapat dilakukan
 
-- **Tipografi:** sistem sans-serif dengan judul 24–25 px, label/kartu 11–16 px dan tab 10 px. Hierarki judul, KPI, nama pelanggan dan status mengikuti referensi. Pemenggalan teks pada 320 px tetap terbaca; panjang nama dan label tidak mendorong kontrol keluar viewport. Font asli Figma tidak disertakan, sehingga rasterisasi dan metrik font masih dapat berbeda.
-- **Spasi dan layout:** header hijau, dua KPI, daftar jadwal dan CTA hijau mengikuti susunan sumber. Margin 18–22 px, radius dan spacing menggunakan token. Lima tab berada di bawah konten, bukan overlay yang menutupi tombol. Chip dapat digeser horizontal pada layar sempit. Banner pratinjau menambah tinggi yang disengaja agar angka contoh tidak tampak sebagai transaksi nyata.
-- **Warna:** ink hijau dan krem memakai token proyek; status memakai green/amber/red pastel. Warna teks amber digelapkan untuk keterbacaan. CTA tahap ini memakai tone brand, sedangkan default tombol autentikasi tetap dipertahankan.
-- **Aset dan ikon:** memakai ikon Feather yang sudah tersedia; tidak ada logo atau ilustrasi pengganti hasil CSS/SVG buatan. Ikon tab mengikuti fungsi Beranda, Booking, Kalender, Pelanggan dan Lainnya. Aset login/splash tidak diubah. Tidak ada aset foto baru dalam lingkup Tahap 2.
-- **Copy dan data:** judul, struktur kartu, label navigasi dan aksi mengikuti referensi. Nama fixture diambil sebagai contoh UI, selalu disertai penanda pratinjau. Kalender/CRM dan fitur lain yang belum terhubung menyatakan ketersediaan, tanpa mengklaim penyimpanan atau transaksi berhasil. Profil akun memakai data Firebase sebenarnya.
+Permintaan awal untuk menguji Booking/Kalender melalui browser dicoba kembali. Runtime kontrol browser tetap gagal sebelum membaca halaman, dengan kegagalan menulis kernel assets karena path tidak ditemukan. Tidak diambil screenshot baru dan screenshot Tahap 3 tidak digunakan sebagai bukti tahap ini. Pembacaan/penulisan SDK serta bundling tidak menggantikan pengujian interaksi.
 
-## Riwayat temuan dan perbaikan
+Dari source: daftar utama memakai FlatList, form ScrollView/KeyboardAvoidingView, field berlabel, validasi inline, konfirmasi sebelum posting, single-submit lock, error/retry, draft memori, pembatasan role, serta referensi pembayaran asal pada refund. Ini belum membuktikan hasil layout, urutan fokus, keyboard, safe area atau navigasi di perangkat.
 
-1. **P1, diperbaiki — route `/home` ganda.** Halaman akun lama dan Beranda dalam `(tabs)` memakai URL yang sama. Halaman lama dihapus dari route tree, Stack menunjuk `(tabs)`, dan `/home` tetap menjadi URL awal. Bukti akhir: login menuju Beranda beserta kelima tab, reload memulihkan sesi; ekspor route dan typecheck lolos.
-2. **P1, diperbaiki — kode navigasi belum lolos tipe SDK 58.** Ikon kini menerima string warna token yang pasti, tanpa `any`/type suppression. Konfigurasi tab mengikuti API terpasang. Tipe route dihasilkan oleh Expo CLI setelah restart, tanpa mengedit file generated. File non-route tidak muncul sebagai route setelah regenerasi.
-3. **P2, diperbaiki — angka contoh tampak sebagai KPI studio.** Data dipisahkan di `features/preview` dan banner pratinjau ditampilkan pada kedua layar yang memakainya. Lihat perbandingan penuh akhir; tambahan banner merupakan perbedaan yang disengaja.
-4. **P2, diperbaiki — menu tanpa respons.** Menu fitur mendatang sekarang membuka dialog informasi. Profil menampilkan akun aktif; dialog ditutup tanpa flash konten kosong. Tidak ada callback kosong. Bukti akhir: dialog Booking baru dan Profil diuji melalui browser.
-5. **P2, diperbaiki — izin staf belum diterapkan pada shell baru.** Akun staf sementara dengan empat izin nonaktif diuji melalui login Firebase. KPI keuangan dan menu Keuangan/Laporan/Kelola Staf tidak muncul; Booking, Kalender dan Pelanggan menampilkan akses terbatas. Fixture akun staf dihapus setelah pengujian. Bukti tambahan: `test-results/stage2-staff.png`.
-6. **P2, diperbaiki — aksesibilitas kontrol.** Tab memiliki nama aksesibel, tombol clear/back/chip minimal 44 px, input pencarian memiliki label dan peran input standar. Reset pencarian dibedakan dari tombol clear. Filter, clear dan kondisi hasil kosong sudah diuji.
+Checklist penerimaan manual yang masih terbuka:
 
-Tidak ada temuan P0/P1/P2 terbuka untuk lingkup Tahap 2.
+1. Booking: pelanggan baru dari draft, pilihan paket, bentrok, reschedule, batal dan kembali ke kalender/list.
+2. DP: input salah dan benar, konfirmasi uang diterima, detail sukses, saldo terbarui, kembali ke booking.
+3. Pelunasan: nominal sesuai sisa terbaru, konflik versi tidak menghapus isian, retry hasil belum pasti tidak membuat entry kedua.
+4. Expense: owner dapat mencatat; staf pembayaran/laporan tidak memperoleh aksi posting keluar.
+5. Refund: booking harus batal, pembayaran asal dapat dibedakan lewat referensi, batas sisa, alasan/konfirmasi, parsial/penuh dan link asal.
+6. Filter periode/metode/jenis, pagination, empty/error/retry, dan ringkasan kas tidak dianggap subtotal halaman.
+7. Role pembayaran tanpa booking dapat memilih konteks minimum; report hanya baca; booking/CRM tidak membuka kas studio.
+8. Layar 320/390 px, nama/nominal panjang, keyboard native, safe area dan Back Android; aksesibilitas dan font scaling.
 
-## Verifikasi fungsi dan build
+## Batas hasil
 
-- Login owner → Beranda dan kelima tab.
-- Filter Menunggu → satu hasil; pencarian gabungan filter → tanpa hasil; reset → semua hasil; pencarian paket tidak membedakan kapital; clear mengembalikan hasil.
-- Switch Hari/Minggu; pencarian/clear pada kerangka Pelanggan.
-- Profil menampilkan nama/email/studio/peran sebenarnya. Dialog fitur mendatang terbuka dan tertutup.
-- Batal logout mempertahankan sesi, konfirmasi logout kembali ke Login. Membuka `/bookings` tanpa sesi diarahkan ke Login.
-- Reload `/home` memulihkan sesi dan tab bar.
-- Staff test memverifikasi pembatasan UI di atas; Rules bisnis tidak diperluas.
-- Console browser pasca-perbaikan: tidak ada error aplikasi saat smoke test.
-- `npm run typecheck`: lulus.
-- `npm run lint`: lulus tanpa warning.
-- `npm test`: 13/13 lulus; mencakup 9 tes auth yang ada dan 4 tes format Rupiah, pergantian hari Jakarta, tanggal invalid dan nomor internasional.
-- Expo export Android/iOS/web: lulus, artefak di `test-results/stage2-export`. Ini validasi bundle JS/Hermes, bukan uji APK/IPA atau perangkat fisik.
+Tidak ada transfer bank/QRIS, pembayaran nyata, email/pesan, deployment cloud atau pemasangan build yang dilakukan. Ledger adalah pencatatan manual yang diverifikasi pengguna. Draft hilang bila proses berhenti/reload; riwayat harus diperiksa sebelum membuat catatan baru bila hasil lama belum pasti. Koreksi/reversal dan offline permanen belum diimplementasikan. Source backup bukan backup database emulator.
 
-## Batas dan polish berikutnya
-
-- Kalender operasional, penyimpanan pelanggan/paket, bentrok booking, pembayaran, laporan dan undangan staf belum termasuk tahap ini; lihat roadmap.
-- P3: penyamaan font, ikon calendar-check persis dan ritme pixel detail dapat disempurnakan pada polish 1:1 setelah aset desain lengkap tersedia. Foto/bingkai perangkat pada board tidak dibuat ulang.
-- UI baru belum diuji di perangkat fisik; safe area dan status bar native dikonfigurasi melalui Expo/React Native.
-- Emulator lokal Firestore menggunakan 8082 karena 8080 dipakai program lain. Auth 9099 dan UI 4000; project cloud tidak diubah.
-
-## Checklist
-
-- [x] Sumber dan render aktual dibandingkan bersama pada ukuran yang sama.
-- [x] Header dan tab bar dibandingkan secara terfokus.
-- [x] Lima permukaan visual, ukuran 390/320 dan state inti diperiksa.
-- [x] Login, navigasi, dialog, pencarian, logout dan pembatasan staf diuji.
-- [x] Typecheck, lint, tests dan export bundel selesai.
-
-final result: passed
+QA visual 1:1, interaksi langsung Tahap 4–5 dan perangkat fisik tetap terbuka. Backend/SDK selesai diuji tanpa kegagalan yang diketahui; fitur tidak dinyatakan siap produksi berdasarkan bundle/test saja.

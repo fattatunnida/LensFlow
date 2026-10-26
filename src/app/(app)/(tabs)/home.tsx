@@ -71,7 +71,7 @@ export default function HomeScreen() {
           </Pressable>) : <View style={styles.restricted}><Text style={styles.client}>Anda belum memiliki izin untuk melihat jadwal studio.</Text></View>}
         </View>
 
-        {canBook && <Button label="+ Booking Baru" tone="brand" onPress={() => router.navigate('/bookings')} />}
+        {canBook && <Button label="+ Booking Baru" tone="brand" onPress={() => router.push('/bookings/new')} />}
         <Pressable accessibilityRole="button" accessibilityLabel="Lihat akun studio" style={styles.account} onPress={() => router.navigate('/more')}>
           <Text style={styles.accountText}>{session.studioName}</Text><Feather name="chevron-right" size={16} color={colors.muted} />
         </Pressable>

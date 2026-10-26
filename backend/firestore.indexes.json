@@ -1,1 +1,18 @@
-{ "indexes": [], "fieldOverrides": [] }
+{
+  "indexes": [
+    { "collectionGroup": "packages", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "isActive", "order": "ASCENDING" },
+      { "fieldPath": "nameKey", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "sessions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"stateKey","order":"ASCENDING"},{"fieldPath":"startAt","order":"DESCENDING"}] },
+    { "collectionGroup": "sessions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"searchTokens","arrayConfig":"CONTAINS"},{"fieldPath":"startAt","order":"DESCENDING"}] },
+    { "collectionGroup": "sessions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"stateKey","order":"ASCENDING"},{"fieldPath":"searchTokens","arrayConfig":"CONTAINS"},{"fieldPath":"startAt","order":"DESCENDING"}] },
+    { "collectionGroup": "sessions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"clientId","order":"ASCENDING"},{"fieldPath":"startAt","order":"DESCENDING"}] },
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"effectiveAt","order":"DESCENDING"}] },
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"method","order":"ASCENDING"},{"fieldPath":"effectiveAt","order":"DESCENDING"}] },
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"method","order":"ASCENDING"},{"fieldPath":"effectiveAt","order":"DESCENDING"}] },
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"bookingId","order":"ASCENDING"},{"fieldPath":"effectiveAt","order":"DESCENDING"}] },
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [{"fieldPath":"bookingId","order":"ASCENDING"},{"fieldPath":"kind","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}] }
+  ],
+  "fieldOverrides": []
+}

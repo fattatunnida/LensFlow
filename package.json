@@ -40,7 +40,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
     "test": "node --import tsx --test tests/*.test.ts",
-    "backend:start": "firebase emulators:start --project demo-lensflow --only auth,firestore",
+    "backend:start": "firebase emulators:start --project demo-lensflow --only auth,firestore,functions",
+    "backend:install": "npm ci --prefix backend/functions",
     "backend:seed": "node backend/scripts/seed-emulators.mjs",
     "backend:owner": "node backend/scripts/provision-owner.mjs",
     "test:backend": "node scripts/test-backend.cjs"
