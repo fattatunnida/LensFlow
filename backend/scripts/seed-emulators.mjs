@@ -1,6 +1,6 @@
 // This script intentionally refuses to target a cloud Firebase project.
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? '127.0.0.1:9099';
-const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080';
+const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8082';
 for (const host of [authHost, firestoreHost]) {
   if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host)) {
     throw new Error('Seed demo hanya boleh memakai emulator pada loopback komputer ini.');

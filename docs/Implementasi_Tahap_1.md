@@ -1,5 +1,7 @@
 # Implementasi tahap pertama LensFlow
 
+Catatan 25 Oktober 2026: halaman akun awal telah digantikan shell lima tab pada Tahap 2. Backend identitas di dokumen ini tetap berlaku. Data contoh pada Beranda/Booking kini ditandai sebagai pratinjau; lihat `Rencana_Implementasi_Bertahap.md` untuk batas implementasi terbaru.
+
 Tahap ini menghubungkan backend identitas dan akses studio dengan Splash dan Login. Stack yang dipilih adalah Expo SDK 58, React Native, TypeScript, Expo Router, Firebase JS SDK 13, Firebase Auth, dan Firestore. Versi rinci dicatat pada `package.json` dan `package-lock.json`. Toolchain memakai Node.js 24.12 atau lebih baru agar konsisten dengan persyaratan SDK Firebase.
 
 ## Batas tahap
@@ -10,7 +12,7 @@ Belum termasuk dashboard operasional, undangan staf, pengubahan profil, custom a
 
 ## Urutan boot
 
-1. Splash native tampil sampai React siap. React mengambil alih dengan SplashView agar koneksi lambat tetap dapat menuju error yang memiliki tombol retry.
+1. Splash native tampil sampai React siap. React mengambil alih dengan SplashView selama minimal 3 detik dan sampai pemeriksaan sesi selesai, agar tampilan tidak terlalu singkat dan koneksi lambat tetap dapat menuju error yang memiliki tombol retry.
 2. Firebase memulihkan sesi dari penyimpanan sesuai platform.
 3. Tanpa user: tampilkan Login.
 4. Dengan user: baca `users/{uid}` dari server, lalu membership dan studio. Snapshot cache tidak digunakan untuk membuka sesi saat boot.

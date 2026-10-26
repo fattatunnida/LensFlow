@@ -1,57 +1,71 @@
-# Login dan splash — pemeriksaan visual
+# QA Tahap 2 — design system dan navigasi utama
 
-Tanggal: 17 Oktober 2026.
+Tanggal: 25 Oktober 2026. QA autentikasi sebelumnya dipertahankan di `docs/qa/Login_Splash_QA.md`.
 
-## Sumber dan bukti
+## Lingkup dan sumber visual
 
-- Login: `C:/Users/Public/Downloads/Login.png`.
-- Splash: `C:/Users/Public/Downloads/Splash screen (1).png`.
-- Kedua sumber berukuran 430 × 940 piksel. Area layar dinormalisasi dengan crop x=20, y=14, 390 × 900 piksel. Bingkai dan status bar pada gambar merupakan perangkat, bukan elemen aplikasi.
-- Viewport browser: 390 × 900 CSS px; hasil screenshot 390 × 900 piksel, skala perbandingan 1:1. Tidak ada pembesaran screenshot untuk penilaian.
-- Implementasi: `test-results/login-reference-update.png`, `test-results/splash-reference-update.png`.
-- Perbandingan penuh, sumber di kiri: `test-results/login-comparison.png`, `test-results/splash-comparison.png`.
-- Detail form: `test-results/login-fields-comparison.png`.
-- Detail branding: `test-results/splash-brand-comparison.png`.
-- State login: form kosong tanpa error; splash: pemeriksaan sesi dengan progress indeterminate. Splash dipasang sementara untuk screenshot, lalu file layout dikembalikan persis ke versi awal (hash cocok). Tidak ada route preview tambahan atau penundaan buatan.
+Sumber: `C:/Users/Public/Downloads/Slice 1 (1).png`, 5397 × 12184 px. Instruksi pekerjaan berasal dari teks terlampir yang meminta melanjutkan Tahap 2 yang terhenti. Penilaian ini mencakup kerangka lima tab, fondasi UI, serta komposisi Beranda dan pratinjau Booking. Ini bukan penerimaan seluruh layar atau integrasi bisnis pada board.
 
-## Temuan dan pemeriksaan
+- Crop Beranda: x=3330, y=582, 390 × 900 px, `test-results/stage2-home-reference.png`.
+- Crop Booking: x=3753, y=582, 390 × 900 px, `test-results/stage2-bookings-reference.png`.
+- Browser-rendered implementation: `test-results/stage2-home.png`, `test-results/stage2-bookings.png`, `test-results/stage2-more.png`.
+- Full-view comparisons: `test-results/stage2-home-comparison.png`, `test-results/stage2-bookings-comparison.png`; sumber di kiri dan implementasi di kanan.
+- Focused comparison: `test-results/stage2-tabs-comparison.png` dan `test-results/stage2-header-comparison.png`.
+- Compact evidence: `test-results/stage2-home-compact.png`, `test-results/stage2-bookings-compact.png`.
 
-Tidak ada temuan P0/P1/P2 yang masih perlu diperbaiki.
+## Viewport, normalisasi dan state
 
-- **Tipografi:** heading 40/48, subtitle login 20/26, subtitle splash 18/24, label/input 14. Arial pada web/iOS dan sans-serif sistem pada Android. Lebar judul, hierarki dan pemenggalan teks sesuai referensi; rasterisasi browser dan font sistem perangkat dapat sedikit berbeda.
-- **Spasi:** logo 72 px, margin form 26 px, input 48 px, tombol 50 px dengan radius 12 px. Susunan elemen mengikuti gambar. Pada layar 320 × 640, halaman dapat di-scroll dan tidak meluber horizontal.
-- **Warna:** login memakai latar krem, teks gelap dan tombol hijau; splash memakai emas, putih dan foto studio dengan lapisan hijau gelap. Token global tidak diubah.
-- **Aset:** aperture diekstrak dari logo yang diberikan. Foto splash dibuat ulang dari referensi untuk menghilangkan teks dan bingkai; posisi kamera, softbox, tanaman serta nuansa warna dipertahankan, tetapi detail fotografinya tidak identik. Ini merupakan keterbatasan aset sumber, bukan klaim kecocokan piksel penuh.
-- **Konten:** copy login dan splash mengikuti referensi; tidak ada copy instruksi implementasi di layar.
-- **Interaksi:** validasi form kosong, tampil/sembunyi password, toggle checkbox, navigasi lupa sandi, kembali ke login diperiksa melalui browser. Ingat saya menyimpan email saja setelah login berhasil, tanpa menyimpan password atau mengubah kebijakan sesi Firebase.
-- **Log browser:** tidak ditemukan exception aplikasi pada pemeriksaan UI. Peringatan driver animasi web diperbaiki dengan memakai driver JS pada web dan driver native pada perangkat.
+Viewport utama 390 × 900 CSS px; screenshot 390 × 900 px; browser melaporkan DPR sekitar 1. Tidak ada pembesaran screenshot implementasi untuk perbandingan. Referensi di-crop dari board pada resolusi aslinya. Status bar, bingkai bulat perangkat dan home indicator pada referensi dikecualikan dari penilaian konten aplikasi; web preview tidak menggambarnya ulang. Perbandingan detail memeriksa header dan navigasi secara terpisah agar perbedaan device chrome tidak dinilai sebagai bug.
 
-## Riwayat perbaikan
+State: owner demo terautentikasi; data Beranda dan Booking adalah fixture lokal yang diberi label Pratinjau. Tanggal menampilkan hari berjalan dalam zona Jakarta. Kalender dan Pelanggan tetap kerangka fitur mendatang. Uji tambahan pada 320 × 700 CSS px menunjukkan lebar dokumen 320 px tanpa overflow horizontal; konten dapat di-scroll sementara tab bar tetap tersedia.
 
-1. Mengganti heading/copy, logo dan komposisi login; menghapus dekorasi lama hanya dari login. Default AuthShell, Brand, Button dan tampilan field halaman lain dipertahankan.
-2. Menyesuaikan font judul, tinggi input dan jarak antarfield setelah perbandingan awal. Bukti akhir: perbandingan penuh login dan crop detail form.
-3. [P2, diperbaiki] Foto splash yang diperbesar sempat memperluas dokumen menjadi 410 × 990. Menambahkan clipping di kontainer splash; ukuran dokumen akhir diperiksa 390 × 900 sesuai viewport. Bukti akhir: perbandingan penuh splash dan crop branding, setelah seluruh gambar selesai dimuat.
+## Evaluasi lima permukaan visual
 
-## Validasi dan batas pemeriksaan
+- **Tipografi:** sistem sans-serif dengan judul 24–25 px, label/kartu 11–16 px dan tab 10 px. Hierarki judul, KPI, nama pelanggan dan status mengikuti referensi. Pemenggalan teks pada 320 px tetap terbaca; panjang nama dan label tidak mendorong kontrol keluar viewport. Font asli Figma tidak disertakan, sehingga rasterisasi dan metrik font masih dapat berbeda.
+- **Spasi dan layout:** header hijau, dua KPI, daftar jadwal dan CTA hijau mengikuti susunan sumber. Margin 18–22 px, radius dan spacing menggunakan token. Lima tab berada di bawah konten, bukan overlay yang menutupi tombol. Chip dapat digeser horizontal pada layar sempit. Banner pratinjau menambah tinggi yang disengaja agar angka contoh tidak tampak sebagai transaksi nyata.
+- **Warna:** ink hijau dan krem memakai token proyek; status memakai green/amber/red pastel. Warna teks amber digelapkan untuk keterbacaan. CTA tahap ini memakai tone brand, sedangkan default tombol autentikasi tetap dipertahankan.
+- **Aset dan ikon:** memakai ikon Feather yang sudah tersedia; tidak ada logo atau ilustrasi pengganti hasil CSS/SVG buatan. Ikon tab mengikuti fungsi Beranda, Booking, Kalender, Pelanggan dan Lainnya. Aset login/splash tidak diubah. Tidak ada aset foto baru dalam lingkup Tahap 2.
+- **Copy dan data:** judul, struktur kartu, label navigasi dan aksi mengikuti referensi. Nama fixture diambil sebagai contoh UI, selalu disertai penanda pratinjau. Kalender/CRM dan fitur lain yang belum terhubung menyatakan ketersediaan, tanpa mengklaim penyimpanan atau transaksi berhasil. Profil akun memakai data Firebase sebenarnya.
 
-- Typecheck: lulus.
-- Expo lint: lulus.
-- Sembilan tes autentikasi yang ada: lulus.
-- File root layout dikembalikan; backend, provider autentikasi, dashboard, reset password dan token global tidak diedit.
-- Native launch dikonfigurasi memakai dasar hijau dan aperture emas; foto penuh ditampilkan oleh React splash. Perubahan native splash memerlukan rebuild untuk terlihat pada binary aplikasi.
-- Belum diuji pada perangkat fisik Android/iOS. Login ke backend tidak diulang pada perubahan visual ini; emulator backend tidak sedang berjalan. Penyimpanan email setelah login sukses belum diuji end-to-end pada perangkat.
+## Riwayat temuan dan perbaikan
 
-## Polish lanjutan
+1. **P1, diperbaiki — route `/home` ganda.** Halaman akun lama dan Beranda dalam `(tabs)` memakai URL yang sama. Halaman lama dihapus dari route tree, Stack menunjuk `(tabs)`, dan `/home` tetap menjadi URL awal. Bukti akhir: login menuju Beranda beserta kelima tab, reload memulihkan sesi; ekspor route dan typecheck lolos.
+2. **P1, diperbaiki — kode navigasi belum lolos tipe SDK 58.** Ikon kini menerima string warna token yang pasti, tanpa `any`/type suppression. Konfigurasi tab mengikuti API terpasang. Tipe route dihasilkan oleh Expo CLI setelah restart, tanpa mengedit file generated. File non-route tidak muncul sebagai route setelah regenerasi.
+3. **P2, diperbaiki — angka contoh tampak sebagai KPI studio.** Data dipisahkan di `features/preview` dan banner pratinjau ditampilkan pada kedua layar yang memakainya. Lihat perbandingan penuh akhir; tambahan banner merupakan perbedaan yang disengaja.
+4. **P2, diperbaiki — menu tanpa respons.** Menu fitur mendatang sekarang membuka dialog informasi. Profil menampilkan akun aktif; dialog ditutup tanpa flash konten kosong. Tidak ada callback kosong. Bukti akhir: dialog Booking baru dan Profil diuji melalui browser.
+5. **P2, diperbaiki — izin staf belum diterapkan pada shell baru.** Akun staf sementara dengan empat izin nonaktif diuji melalui login Firebase. KPI keuangan dan menu Keuangan/Laporan/Kelola Staf tidak muncul; Booking, Kalender dan Pelanggan menampilkan akses terbatas. Fixture akun staf dihapus setelah pengujian. Bukti tambahan: `test-results/stage2-staff.png`.
+6. **P2, diperbaiki — aksesibilitas kontrol.** Tab memiliki nama aksesibel, tombol clear/back/chip minimal 44 px, input pencarian memiliki label dan peran input standar. Reset pencarian dibedakan dari tombol clear. Filter, clear dan kondisi hasil kosong sudah diuji.
 
-- P3: foto studio asli tanpa overlay akan memberi kecocokan fotografi yang lebih tepat daripada hasil rekonstruksi.
-- P3: ketajaman logo dibatasi gambar referensi 72 px; aset vektor asli dapat meningkatkan ketajaman pada layar berdensitas tinggi.
+Tidak ada temuan P0/P1/P2 terbuka untuk lingkup Tahap 2.
+
+## Verifikasi fungsi dan build
+
+- Login owner → Beranda dan kelima tab.
+- Filter Menunggu → satu hasil; pencarian gabungan filter → tanpa hasil; reset → semua hasil; pencarian paket tidak membedakan kapital; clear mengembalikan hasil.
+- Switch Hari/Minggu; pencarian/clear pada kerangka Pelanggan.
+- Profil menampilkan nama/email/studio/peran sebenarnya. Dialog fitur mendatang terbuka dan tertutup.
+- Batal logout mempertahankan sesi, konfirmasi logout kembali ke Login. Membuka `/bookings` tanpa sesi diarahkan ke Login.
+- Reload `/home` memulihkan sesi dan tab bar.
+- Staff test memverifikasi pembatasan UI di atas; Rules bisnis tidak diperluas.
+- Console browser pasca-perbaikan: tidak ada error aplikasi saat smoke test.
+- `npm run typecheck`: lulus.
+- `npm run lint`: lulus tanpa warning.
+- `npm test`: 13/13 lulus; mencakup 9 tes auth yang ada dan 4 tes format Rupiah, pergantian hari Jakarta, tanggal invalid dan nomor internasional.
+- Expo export Android/iOS/web: lulus, artefak di `test-results/stage2-export`. Ini validasi bundle JS/Hermes, bukan uji APK/IPA atau perangkat fisik.
+
+## Batas dan polish berikutnya
+
+- Kalender operasional, penyimpanan pelanggan/paket, bentrok booking, pembayaran, laporan dan undangan staf belum termasuk tahap ini; lihat roadmap.
+- P3: penyamaan font, ikon calendar-check persis dan ritme pixel detail dapat disempurnakan pada polish 1:1 setelah aset desain lengkap tersedia. Foto/bingkai perangkat pada board tidak dibuat ulang.
+- UI baru belum diuji di perangkat fisik; safe area dan status bar native dikonfigurasi melalui Expo/React Native.
+- Emulator lokal Firestore menggunakan 8082 karena 8080 dipakai program lain. Auth 9099 dan UI 4000; project cloud tidak diubah.
 
 ## Checklist
 
-- [x] Membandingkan sumber dan implementasi pada viewport yang sama.
-- [x] Memeriksa tipografi, spasi, warna, aset, dan konten.
-- [x] Memeriksa detail form dan branding.
-- [x] Memperbaiki overflow splash dan memeriksa ulang.
-- [x] Menjalankan lint, typecheck, dan tes yang ada.
+- [x] Sumber dan render aktual dibandingkan bersama pada ukuran yang sama.
+- [x] Header dan tab bar dibandingkan secara terfokus.
+- [x] Lima permukaan visual, ukuran 390/320 dan state inti diperiksa.
+- [x] Login, navigasi, dialog, pencarian, logout dan pembatasan staf diuji.
+- [x] Typecheck, lint, tests dan export bundel selesai.
 
 final result: passed

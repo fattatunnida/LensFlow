@@ -31,7 +31,7 @@ export function getFirebaseClient(): FirebaseClient {
   if (emulator && !existing) {
     const host = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST || '127.0.0.1';
     connectAuthEmulator(auth, `http://${host}:${process.env.EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT || '9099'}`, { disableWarnings: true });
-    connectFirestoreEmulator(db, host, Number(process.env.EXPO_PUBLIC_FIREBASE_FIRESTORE_EMULATOR_PORT || '8080'));
+    connectFirestoreEmulator(db, host, Number(process.env.EXPO_PUBLIC_FIREBASE_FIRESTORE_EMULATOR_PORT || '8082'));
   }
   auth.languageCode = 'id';
   client = { auth, db, emulator };

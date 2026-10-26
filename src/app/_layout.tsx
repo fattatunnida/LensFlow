@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import * as NativeSplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
@@ -14,10 +14,15 @@ void NativeSplashScreen.preventAutoHideAsync().catch(() => {});
 
 function Routes() {
   const { state, retry, logout } = useAuth();
+  const [minimumSplashComplete, setMinimumSplashComplete] = useState(false);
   // Hand over to the React splash immediately; a slow server must never leave
   // the unresponsive native splash covering the connection error/retry action.
   useEffect(() => { void NativeSplashScreen.hideAsync().catch(() => {}); }, []);
-  if (state.status === 'loading') return <SplashView />;
+  useEffect(() => {
+    const timer = setTimeout(() => setMinimumSplashComplete(true), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+  if (state.status === 'loading' || !minimumSplashComplete) return <SplashView />;
   if (state.status === 'unavailable') return <AuthShell>
     <View style={styles.errorContent}>
       <Text style={styles.heading}>Koneksi belum siap</Text>

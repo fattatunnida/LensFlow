@@ -2,6 +2,8 @@
 
 Aplikasi operasional studio foto dengan React Native, Expo Router, Firebase Authentication, dan Cloud Firestore. Tahap pertama mengimplementasikan **backend akun dan akses studio → Splash → Login → halaman akun studio**, termasuk logout dan permintaan email reset password.
 
+Tahap 2 menyediakan UI kit dan lima tab **Beranda, Booking, Kalender, Pelanggan, Lainnya**. `/home` hanya dimiliki oleh `src/app/(app)/(tabs)/home.tsx`. Beranda dan daftar booking memakai **data contoh berlabel pratinjau**; pencarian dan filter bekerja lokal, tanpa membaca atau menulis booking studio. Kalender dan pelanggan masih berupa kerangka tampilan. Pembuatan booking, penyimpanan CRM, transaksi, dan pengaturan bisnis belum diimplementasikan. Login, membership, profil akun, dan logout tetap memakai Firebase.
+
 ## Jalankan lokal
 
 Prasyarat: Node.js 24.12 atau lebih baru, npm, serta Java 21 atau lebih baru untuk Firestore Emulator. Dependensi aplikasi dikunci di `package-lock.json`.
@@ -44,11 +46,11 @@ Atur `EXPO_PUBLIC_FIREBASE_EMULATOR_HOST` di `.env`:
 | Android Emulator bawaan Android Studio | `10.0.2.2` |
 | Ponsel fisik di Wi-Fi yang sama | IPv4 LAN komputer, misalnya `192.168.1.10` |
 
-Cari IPv4 menggunakan `ipconfig`, lalu restart Expo setelah mengubah `.env`. Untuk ponsel, pastikan jaringan privat mengizinkan akses port 8080 dan 9099. Emulator tidak memiliki perlindungan admin seperti layanan produksi; jangan membukanya ke internet. Mode tunnel Expo hanya meneruskan Metro, bukan koneksi ke Firebase Emulator.
+Cari IPv4 menggunakan `ipconfig`, lalu restart Expo setelah mengubah `.env`. Untuk ponsel, pastikan jaringan privat mengizinkan akses port 8082 (Firestore) dan 9099 (Auth). Firestore memakai 8082 agar tidak berbenturan dengan layanan lain pada 8080. Jika `.env` lama masih berisi 8080, ubah `EXPO_PUBLIC_FIREBASE_FIRESTORE_EMULATOR_PORT=8082`. Emulator tidak memiliki perlindungan admin seperti layanan produksi; jangan membukanya ke internet. Mode tunnel Expo hanya meneruskan Metro, bukan koneksi ke Firebase Emulator.
 
 ## Alur yang sudah tersedia
 
-1. Splash memulihkan sesi Firebase. Di Android/iOS, persistensi akun memakai Expo SecureStore, termasuk pemecahan record sesi besar; preview web memakai sessionStorage per tab.
+1. Splash React tampil minimal 3 detik sambil memulihkan sesi Firebase; pemeriksaan sesi yang lebih lama tetap diselesaikan sebelum navigasi. Di Android/iOS, persistensi akun memakai Expo SecureStore, termasuk pemecahan record sesi besar; preview web memakai sessionStorage per tab.
 2. Pengguna tanpa sesi diarahkan ke Login. Input email dan kata sandi divalidasi, kesalahan kredensial memakai pesan generik, dan submit ganda dicegah.
 3. Setelah autentikasi, aplikasi meminta profil, membership aktif, dan studio dari server. Akun Auth tanpa membership tidak dapat masuk ke ruang kerja.
 4. Halaman akun menampilkan nama pengguna, studio, dan peran nyata dari Firestore. Ini halaman konfirmasi akses, belum dashboard booking.
