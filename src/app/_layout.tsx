@@ -11,6 +11,7 @@ import { Button } from '@/components/Button';
 import { colors } from '@/theme/tokens';
 import { clearMasterDrafts } from '@/features/master-data/drafts';
 import { clearBookingHandoffs } from '@/features/bookings/drafts';
+import { FeedbackHost } from '@/features/feedback/FeedbackHost';
 
 void NativeSplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -43,7 +44,7 @@ function Routes() {
 }
 
 export default function RootLayout() {
-  return <SafeAreaProvider><AuthProvider><StatusBar style="dark" /><Routes /></AuthProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><AuthProvider><StatusBar style="dark" /><Routes /><FeedbackHost /></AuthProvider></SafeAreaProvider>;
 }
 const styles = StyleSheet.create({
   errorContent: { gap: 20 }, heading: { fontSize: 28, fontWeight: '700', color: colors.ink },

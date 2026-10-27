@@ -1,3 +1,5 @@
+> QA terbaru: notifikasi aksi/login/logout dan pengelolaan state telah diuji. Lihat [QA notifikasi dan state](docs/qa/Notifikasi_dan_State_QA.md).
+
 > QA terkini: migrasi Firestore Spark dan deployment cloud telah selesai. Lihat [Firestore Spark QA](docs/qa/Firestore_Spark_QA.md). Catatan tahap sebelumnya di bawah bersifat historis.
 
 # QA Tahap 7–8 dan Regresi Tahap 9
@@ -52,4 +54,5 @@ Error PERMISSION_DENIED dalam log backend adalah pengujian negatif yang disengaj
 Tahap 7–8 inti dan QA otomatis selesai; Tahap 9 belum selesai penuh. Masih terbuka: seluruh Figma 1:1, seluruh state offline/timeout/unsaved changes, keyboard/safe area/splash/performa native, UAT owner/staf, seluruh variasi viewport, deployment/index/billing/Scheduler cloud dan uji produksi. Avatar upload, push perangkat, email undangan otomatis, UI reset custom seluruh state Figma dan App Check produksi belum dibuka. Aplikasi belum dinyatakan siap rilis toko aplikasi.
 
 Project Firebase Anda belum dihubungkan. Panduan konfigurasi/deploy/provisioning/UAT: docs/Hubungkan_Firebase.md. Backup source tidak memuat database atau kredensial lingkungan.
+
 

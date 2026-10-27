@@ -22,12 +22,14 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const editedEmail = useRef(false);
   const submitting = useRef(false);
+  const alive = useRef(false);
   useEffect(() => {
+    alive.current = true;
     let active = true;
     void readRememberedEmail().then((saved) => {
       if (active && saved && !editedEmail.current) { setEmail(saved); setRemember(true); }
     });
-    return () => { active = false; };
+    return () => { active = false; alive.current = false; };
   }, []);
   const message = error || (state.status === 'signedOut' ? state.message : undefined);
   async function submit() {
@@ -39,10 +41,10 @@ export default function LoginScreen() {
     try {
       await login(email, password);
       // Remember only the email. Existing Firebase session persistence is unchanged.
-      await saveRememberedEmail(remember ? email.trim().toLowerCase() : null);
+      void saveRememberedEmail(remember ? email.trim().toLowerCase() : null).catch(() => {});
     }
-    catch (cause) { setError(authErrorMessage(cause)); }
-    finally { submitting.current = false; setBusy(false); }
+    catch (cause) { if (alive.current) setError(authErrorMessage(cause)); }
+    finally { submitting.current = false; if (alive.current) setBusy(false); }
   }
   return <SafeAreaView style={styles.page}>
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

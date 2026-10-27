@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": { "supportsTablet": false, "bundleIdentifier": "app.lensflow.mobile" },
     "android": {
-      "adaptiveIcon": { "backgroundColor": "#203C35", "foregroundImage": "./assets/brand/adaptive-icon.png" },
+      "adaptiveIcon": { "backgroundColor": "#F8F7F4", "foregroundImage": "./assets/brand/adaptive-icon.png", "monochromeImage": "./assets/brand/monochrome-icon.png" },
       "predictiveBackGestureEnabled": true,
       "package": "app.lensflow.mobile"
     },
@@ -21,6 +21,13 @@
         "image": "./assets/auth/aperture-gold.png",
         "imageWidth": 72,
         "resizeMode": "contain"
+      }],
+      ["expo-notifications", {
+        "icon": "./assets/brand/notification-icon.png",
+        "largeIcon": "./assets/brand/notification-large-icon.png",
+        "color": "#193B32",
+        "enableRemoteNotifications": false,
+        "enableBackgroundRemoteNotifications": false
       }],
       "expo-secure-store",
       "expo-font"

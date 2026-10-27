@@ -1,8 +1,8 @@
 import { Image } from 'react-native';
 
-/** The aperture artwork supplied with the login reference. */
-export function ApertureMark({ gold = false }: { gold?: boolean }) {
+/** Uses the supplied aperture artwork, including its transparent blade seams. */
+export function ApertureMark({ gold = false, size = 72 }: { gold?: boolean; size?: number }) {
   return <Image source={require('../../assets/auth/aperture.png')}
-    style={{ width: 72, height: 72, tintColor: gold ? '#D9CCA4' : '#193D32' }}
+    style={{ width: size, height: size, tintColor: gold ? '#D9CCA4' : '#193B32' }}
     resizeMode="contain" accessibilityIgnoresInvertColors accessible={false} />;
 }

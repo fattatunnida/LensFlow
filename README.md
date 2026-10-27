@@ -48,6 +48,14 @@ Akun demo khusus emulator: `owner@lensflow.test` / `LensFlowDemo2026!`. Emulator
 
 Owner membuat undangan untuk email dan izin tertentu, lalu membagikan tautan dari Kelola Staf. Staf membuka tautan, mendaftar atau masuk, memverifikasi email melalui Firebase, lalu menekan **Saya sudah verifikasi email**. Transaksi claim membuat profil dan membership staf dengan izin persis dari undangan. Undangan berlaku hingga tujuh hari, dapat dibatalkan atau diterbitkan ulang sebelum diterima. Owner awal disiapkan melalui proses tepercaya; aplikasi tidak menyediakan pendaftaran owner atau perubahan role sendiri.
 
+## Pemberitahuan aksi dan sesi
+
+Pesan singkat berlogo LensFlow tampil setelah login/logout, penyimpanan pelanggan/paket, perubahan booking, pencatatan uang, pengaturan/profil, perubahan password, reset password, dan pengelolaan staf. Login sukses hanya dikonfirmasi setelah Authentication serta akses studio tervalidasi. Refresh token, perubahan profil dan pemulihan sesi tidak mengulang pesan login.
+
+Di Android/iOS, buka **Notifikasi → Pengaturan notifikasi → Notifikasi login/logout di HP** untuk mengaktifkan pemberitahuan lokal akun dan memberikan izin perangkat. Preferensi ini berlaku di perangkat tersebut; web memakai pesan dalam aplikasi. Notifikasi tidak memerlukan token push, Cloud Functions atau server tambahan. Ikon native memerlukan build aplikasi yang sesuai. Push jarak jauh/pengingat terjadwal saat aplikasi tertutup tetap belum termasuk.
+
+Antrean pesan dibatasi, retry mutation yang sama tidak menggandakan konfirmasi, dan hasil async sesi lama diabaikan setelah logout/pergantian akun. Data/read hooks tetap memakai kunci pengguna/izin dan generation guard. Rincian verifikasi: [QA notifikasi dan state](docs/qa/Notifikasi_dan_State_QA.md).
+
 ## Pemeriksaan
 
 ```powershell

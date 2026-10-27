@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { canRead, canWrite, LEAD_SOURCES, MasterDataError, type ClientRecord, type LeadSource, type MasterActor, type MasterKind, type MasterPayloads, type MasterRecords, type PackageFilter, type PhotoPackage } from './models';
 import { clientSearch, validateClient, validatePackage } from './validation';
+import { feedback } from '../../lib/feedback/store';
 
 export const PAGE_SIZE = 25;
 export type MasterPage<T> = { items: T[]; cursor: QueryDocumentSnapshot | null; hasMore: boolean };
@@ -79,6 +80,7 @@ export async function duplicateClients(db: Firestore, actor: MasterActor, phone:
 
 /** Transactions are online-only. Resolve only after commit; retries reuse ID + mutation ID. */
 export async function saveMaster<K extends MasterKind>(db: Firestore, actor: MasterActor, kind: K, id: string, expectedVersion: number | null, value: MasterPayloads[K], mutationId: string): Promise<{ id: string; version: number }> {
+  const announce = feedback.capture();
   if (!canWrite(actor, kind)) throw new MasterDataError('permission');
   const ref = doc(db, 'studios', identifier(actor.studioId), kind, identifier(id));
   // Bound the read-only preflight before attempting a write, rather than timing
@@ -86,7 +88,7 @@ export async function saveMaster<K extends MasterKind>(db: Firestore, actor: Mas
   const member = await serverRead(getDocFromServer(doc(db, 'studios', actor.studioId, 'members', identifier(actor.uid))));
   const membership = member.data();
   if (membership?.status !== 'active' || (membership.role !== 'owner' && !(kind === 'clients' && membership.role === 'staff' && membership.permissions?.calendarCrm === true))) throw new MasterDataError('permission');
-  return runTransaction(db, async (transaction) => {
+  const result = await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(ref);
     const current = snapshot.data();
     if (current?.mutationId === mutationId) {
@@ -105,4 +107,6 @@ export async function saveMaster<K extends MasterKind>(db: Firestore, actor: Mas
     if(kind==='clients')transaction.set(doc(db,'studios',actor.studioId,'clientChoices',id),{name:value.name,nameKey:value.nameKey,phone:(value as MasterPayloads['clients']).phone,email:(value as MasterPayloads['clients']).email,version:expectedVersion+1});
     return { id, version: expectedVersion + 1 };
   }, { maxAttempts: 3 });
+  announce({ title: kind === 'clients' ? expectedVersion === null ? 'Pelanggan berhasil ditambahkan' : 'Pelanggan diperbarui' : expectedVersion === null ? 'Paket foto berhasil ditambahkan' : 'Paket foto diperbarui', key: `master:${actor.studioId}:${kind}:${mutationId}` });
+  return result;
 }

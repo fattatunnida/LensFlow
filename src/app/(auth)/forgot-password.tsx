@@ -9,6 +9,7 @@ import { Button } from '@/components/Button';
 import { getFirebaseClient } from '@/lib/firebase/client';
 import { authErrorMessage, normalizeEmail, validateLogin } from '@/lib/auth/validation';
 import { colors } from '@/theme/tokens';
+import { feedback } from '@/lib/feedback/store';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -17,6 +18,8 @@ export default function ForgotPasswordScreen() {
   const [sent, setSent] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const submitting = useRef(false);
+  const alive = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     if (!cooldown) return;
     const timer = setTimeout(() => setCooldown((value) => value - 1), 1000);
@@ -27,14 +30,20 @@ export default function ForgotPasswordScreen() {
     const validation = validateLogin(email, 'unused');
     if (validation.email) { setError(validation.email); return; }
     submitting.current = true; setBusy(true); setError('');
+    const announce = feedback.capture();
+    const completed = () => {
+      if (!alive.current) return;
+      setSent(true); setCooldown(60);
+      announce({ title: 'Permintaan reset diterima', message: 'Jika email terdaftar, instruksi penggantian kata sandi akan dikirim.' });
+    };
     try {
       await sendPasswordResetEmail(getFirebaseClient().auth, normalizeEmail(email));
-      setSent(true); setCooldown(60);
+      completed();
     } catch (cause) {
       if (typeof cause === 'object' && cause && 'code' in cause && cause.code === 'auth/user-not-found') {
-        setSent(true); setCooldown(60);
-      } else setError(authErrorMessage(cause));
-    } finally { submitting.current = false; setBusy(false); }
+        completed();
+      } else if (alive.current) setError(authErrorMessage(cause));
+    } finally { submitting.current = false; if (alive.current) setBusy(false); }
   }
   return <AuthShell><View style={styles.content}>
     <View style={styles.icon}><Feather name={sent ? 'check' : 'key'} color={colors.ink} size={28} /></View>

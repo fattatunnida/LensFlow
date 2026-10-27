@@ -14,6 +14,12 @@ export function validateLogin(email: string, password: string) {
 export function authErrorMessage(error: unknown): string {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
   switch (code) {
+    case 'app/auth-access-denied':
+    case 'app/auth-busy':
+    case 'app/auth-timeout':
+    case 'app/auth-cancelled':
+    case 'app/auth-unavailable':
+      return String((error as { message?: string }).message || 'Sesi belum siap. Silakan coba lagi.');
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':

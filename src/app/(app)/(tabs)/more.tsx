@@ -6,7 +6,7 @@ import { Brand } from '@/components/Brand';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { colors, radii, spacing } from '@/theme/tokens';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Permissions } from '@/lib/auth/session';
 
 type FeatherIconName = React.ComponentProps<typeof Feather>['name'];
@@ -53,6 +53,8 @@ export default function MoreScreen() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [logoutError, setLogoutError] = useState('');
   const { logout } = useAuth();
+  const alive = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   if (state.status !== 'authenticated') return null;
   const { session } = state;
@@ -64,9 +66,9 @@ export default function MoreScreen() {
     try {
       await logout();
     } catch {
-      setLogoutError('Belum berhasil keluar. Coba kembali.');
+      if (alive.current) setLogoutError('Belum berhasil keluar. Coba kembali.');
     } finally {
-      setLogoutBusy(false);
+      if (alive.current) setLogoutBusy(false);
     }
   }
 
